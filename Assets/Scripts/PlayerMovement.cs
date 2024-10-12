@@ -61,9 +61,19 @@ public class PlayerMovement : MonoBehaviour
 
     private float defaultHeight;
     private bool isSliding = false;
-    private float slideTimer = 0f;
+    private float slideTimerInternal = 0f;
     private float initialSlideSpeed;
     private Vector3 originalCameraPosition;
+
+    // *** New flag to request slide upon landing ***
+    private bool requestedSlide = false;
+
+    // *** New variable to store the last grounded speed ***
+    private float lastGroundedSpeed = 0f;
+
+    // *** New variables to handle movement direction locking mid-air ***
+    private Vector3 airMoveDirection = Vector3.zero;
+    private bool wasGrounded = true; // To track previous grounded state
 
     void Start()
     {
@@ -72,6 +82,7 @@ public class PlayerMovement : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
         currentSpeed = walkSpeed;
+        lastGroundedSpeed = walkSpeed; // Initialize with walkSpeed
         currentBobbingSpeed = walkBobbingSpeed;
         currentBobbingAmount = bobbingAmount;
         defaultCameraYPos = playerCamera.localPosition.y;
@@ -110,6 +121,11 @@ public class PlayerMovement : MonoBehaviour
         {
             Debug.LogError("Slide AudioSource or Sliding Sound AudioClip is not assigned.");
         }
+
+        // *** Configure Rigidbody Settings ***
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
     void Update()
@@ -123,6 +139,13 @@ public class PlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         HandleMovement();
+
+        // *** Check for slide request upon landing ***
+        if (requestedSlide && isGrounded && !isSliding)
+        {
+            StartSlide();
+            requestedSlide = false;
+        }
     }
 
     void HandleMouseLook()
@@ -144,62 +167,78 @@ public class PlayerMovement : MonoBehaviour
         float x = Input.GetAxis("Horizontal");
         float z = Input.GetAxis("Vertical");
 
-        Vector3 move = transform.right * x + transform.forward * z;
+        Vector3 inputMove = transform.right * x + transform.forward * z;
+        Vector3 move;
 
-        if (move.magnitude > 1f)
+        if (isGrounded)
         {
-            move.Normalize();
-        }
-
-        if (IsAiming)
-        {
-            currentSpeed = walkSpeed;
-        }
-        else if (isSliding)
-        {
-            // During sliding, currentSpeed is managed by sliding logic
-            // Do not override currentSpeed here
-        }
-        else if (isCrouching)
-        {
-            currentSpeed = crouchSpeed;  // Slower movement while crouching
-        }
-        else
-        {
-            // Prevent sprinting while crouched by adding !isCrouching
-            if (Input.GetKey(KeyCode.LeftShift) && z > 0 && !isCrouching)
+            if (!wasGrounded)
             {
-                currentSpeed = runSpeed;
+                wasGrounded = true;
+                airMoveDirection = Vector3.zero;
             }
-            else
+
+            if (IsAiming)
             {
                 currentSpeed = walkSpeed;
             }
-        }
+            else if (isSliding)
+            {
+                // Slide manages currentSpeed internally
+            }
+            else if (isCrouching)
+            {
+                currentSpeed = crouchSpeed;
+            }
+            else
+            {
+                currentSpeed = (Input.GetKey(KeyCode.LeftShift) && z > 0 && !isCrouching) ? runSpeed : walkSpeed;
+            }
 
-        if (move.magnitude == 0 && !isSliding)
+            if (inputMove.magnitude > 1f)
+            {
+                inputMove.Normalize();
+            }
+
+            if (inputMove.magnitude == 0 && !isSliding)
+            {
+                currentSpeed = 0f;
+            }
+
+            lastGroundedSpeed = currentSpeed;
+            move = inputMove;
+        }
+        else
         {
-            currentSpeed = 0f;
+            if (wasGrounded)
+            {
+                airMoveDirection = inputMove.normalized;
+                wasGrounded = false;
+            }
+
+            move = airMoveDirection;
+            currentSpeed = lastGroundedSpeed;
         }
 
-        Vector3 newPosition = rb.position + move * currentSpeed * Time.fixedDeltaTime;
-        rb.MovePosition(newPosition);
+        Vector3 desiredVelocity = move * currentSpeed;
+        Vector3 currentVelocity = rb.velocity;
+        Vector3 newVelocity = new Vector3(desiredVelocity.x, currentVelocity.y, desiredVelocity.z);
+        rb.velocity = newVelocity;
 
-        // *** Handle walking and sprinting sounds using a single AudioSource ***
+        // Handle walking and sprinting sounds
         if (currentSpeed > 0 && isGrounded && !IsAiming)
         {
-            // Determine the pitch based on speed
             if (currentSpeed == runSpeed)
             {
-                walkingAudioSource.pitch = 1.5f; // Higher pitch for sprinting
+                walkingAudioSource.pitch = 1.5f;
             }
             else if (currentSpeed == walkSpeed)
             {
-                walkingAudioSource.pitch = 1f; // Normal pitch for walking
+                walkingAudioSource.pitch = 1f;
             }
             else if (currentSpeed == crouchSpeed)
             {
-                walkingAudioSource.pitch = 0.8f; // Lower pitch for crouching
+                walkingAudioSource.pitch = 0.8f;
             }
 
             if (!walkingAudioSource.isPlaying)
@@ -210,21 +249,18 @@ public class PlayerMovement : MonoBehaviour
         }
         else
         {
-            // Stop walking sound when not moving or not grounded
             if (walkingAudioSource.isPlaying)
             {
                 walkingAudioSource.Stop();
-                walkingAudioSource.pitch = 1f; // Reset pitch to normal
+                walkingAudioSource.pitch = 1f;
                 Debug.Log("Walking/Sprinting sound stopped.");
             }
         }
     }
 
+
     void HandleCameraBobbing()
     {
-        float horizontal = Input.GetAxis("Horizontal");
-        float vertical = Input.GetAxis("Vertical");
-
         // *** Skip camera bobbing during sliding ***
         if (isSliding)
         {
@@ -233,7 +269,19 @@ public class PlayerMovement : MonoBehaviour
             return;
         }
 
-        if (Mathf.Abs(horizontal) > 0.1f || Mathf.Abs(vertical) > 0.1f)
+        // Determine if the player is moving based on move direction
+        bool isMoving = false;
+        if (isGrounded)
+        {
+            isMoving = (Input.GetAxis("Horizontal") != 0f || Input.GetAxis("Vertical") != 0f);
+        }
+        else
+        {
+            // While airborne, consider moving if airMoveDirection is significant
+            isMoving = airMoveDirection.magnitude > 0.1f;
+        }
+
+        if (isMoving)
         {
             float bobbingSpeed;
             float bobbingAmountLocal;
@@ -271,7 +319,7 @@ public class PlayerMovement : MonoBehaviour
             }
             else if (isGrounded && !isCrouching)
             {
-                // **Perform a jump if grounded, not crouching, and not sliding**
+                // **Perform a jump if grounded, not crouching, and not sliding **
                 rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
                 // Jump sound effect removed
             }
@@ -289,13 +337,31 @@ public class PlayerMovement : MonoBehaviour
             }
             else
             {
-                if (!isGrounded)
+                if (isGrounded)
                 {
-                    StartSlide();
+                    // *** Check if the current speed is greater than walkSpeed before starting slide ***
+                    if (lastGroundedSpeed > walkSpeed)
+                    {
+                        // *** Start sliding immediately if grounded and speed is sufficient ***
+                        StartSlide();
+                    }
+                    else
+                    {
+                        Debug.Log("Cannot start slide: Speed is not greater than walking speed.");
+                    }
                 }
                 else
                 {
-                    isCrouching = true;
+                    // *** Request to slide upon landing only if lastGroundedSpeed is greater than walkSpeed ***
+                    if (lastGroundedSpeed > walkSpeed)
+                    {
+                        requestedSlide = true;
+                        Debug.Log("Slide requested. Will initiate upon landing.");
+                    }
+                    else
+                    {
+                        Debug.Log("Cannot request slide: Speed is not greater than walking speed.");
+                    }
                 }
             }
         }
@@ -341,8 +407,22 @@ public class PlayerMovement : MonoBehaviour
 
     void StartSlide()
     {
+        // *** Ensure sliding only starts when grounded ***
+        if (!isGrounded)
+        {
+            Debug.LogWarning("Cannot start slide: Player is not grounded.");
+            return;
+        }
+
+        // *** Additional check to ensure speed is greater than walking speed ***
+        if (lastGroundedSpeed <= walkSpeed)
+        {
+            Debug.Log("Cannot start slide: Speed is not greater than walking speed.");
+            return;
+        }
+
         isSliding = true;
-        slideTimer = slideDuration;
+        slideTimerInternal = slideDuration;
 
         // *** Initialize sliding speed ***
         initialSlideSpeed = walkSpeed * slideSpeedMultiplier;
@@ -374,15 +454,15 @@ public class PlayerMovement : MonoBehaviour
 
     void ContinueSlide()
     {
-        if (slideTimer > 0)
+        if (slideTimerInternal > 0)
         {
             // *** Calculate the proportion of slide completed ***
-            float speedDecayFactor = slideTimer / slideDuration; // From 1 to 0
+            float speedDecayFactor = slideTimerInternal / slideDuration; // From 1 to 0
 
-            // *** Linearly interpolate speed from initialSlideSpeed to crouchSpeed ***
+            // *** Linearly interpolate speed from crouchSpeed to initialSlideSpeed ***
             currentSpeed = Mathf.Lerp(crouchSpeed, initialSlideSpeed, speedDecayFactor);
 
-            slideTimer -= Time.deltaTime;
+            slideTimerInternal -= Time.deltaTime;
         }
         else
         {
@@ -427,7 +507,7 @@ public class PlayerMovement : MonoBehaviour
     void CancelSlide()
     {
         isSliding = false;
-        slideTimer = 0f;
+        slideTimerInternal = 0f;
 
         // Determine the new speed based on whether LeftShift is held
         if (Input.GetKey(KeyCode.LeftShift) && IsGrounded && !isCrouching)

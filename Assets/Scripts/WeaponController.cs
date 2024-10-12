@@ -77,12 +77,8 @@ public class WeaponController : MonoBehaviour
     private Vector3 currentCameraRecoil = Vector3.zero;
     private Vector3 recoilVelocity = Vector3.zero;
 
-    [Header("Reload Animation Settings")]
-    public AnimationClip reloadAnimationClip; // Assign your reload animation clip here
-
-    // Optional fallback
     [Header("Reload Settings")]
-    public float reloadDuration = 2f; // Duration of the reload in seconds (fallback)
+    public float reloadDuration = 2f; // Duration of the reload in seconds
 
     void Start()
     {
@@ -105,6 +101,14 @@ public class WeaponController : MonoBehaviour
                 Debug.LogError("CameraRecoil GameObject not found. Please assign it in the Inspector.");
             }
         }
+
+        // Optional: Remove if reload animation is not used
+        /*
+        if (reloadAnimationClip == null)
+        {
+            Debug.LogError("Reload Animation Clip is not assigned in the Inspector.");
+        }
+        */
     }
 
     void Update()
@@ -187,13 +191,20 @@ public class WeaponController : MonoBehaviour
         float timeBetweenShots = 1f / fireRate;
         if (Input.GetMouseButton(0) && Time.time >= nextFireTime && !isReloading)
         {
+            PlayShootingSound();
             isShooting = true;
             // Add crosshair and other firing effects
             animator.speed = fireRate / 10f;
             animator.SetBool("IsShooting", true);
             nextFireTime = Time.time + timeBetweenShots;
             FireWeapon();
-            
+
+            // Notify CrosshairController that shooting has started
+            if (crosshairController != null)
+            {
+                crosshairController.StartShooting();
+            }
+
             // Apply recoil after each shot
             ApplyShootingRecoil();
         }
@@ -204,15 +215,25 @@ public class WeaponController : MonoBehaviour
             animator.SetBool("IsShooting", false);
             animator.speed = 1f; // Reset the animation speed
             currentRecoilIndex = 0; // Reset the recoil index when the player stops shooting
+            Debug.Log("Stopped shooting");
+
+            // Notify CrosshairController that shooting has stopped
+            if (crosshairController != null)
+            {
+                crosshairController.StopShooting();
+            }
         }
     }
+
 
     void FireWeapon()
     {
         if (isReloading)
         {
+            Debug.Log("Cannot fire while reloading.");
             return;
         }
+
         // Instantiate muzzle flash if assigned
         if (muzzleFlashPrefab != null && muzzleTransform != null)
         {
@@ -221,15 +242,14 @@ public class WeaponController : MonoBehaviour
             muzzleFlashInstance.transform.localRotation = Quaternion.identity;
             Destroy(muzzleFlashInstance, 0.5f);
         }
-        //PlayShootingSound();
 
         // Get the main camera's forward direction
         Camera mainCamera = Camera.main;
         Vector3 direction = mainCamera.transform.forward;
 
         // Apply recoil to the direction based on the recoil pattern
-        if (recoilPattern != null && 
-            currentRecoilIndex < recoilPattern.verticalRecoil.Length && 
+        if (recoilPattern != null &&
+            currentRecoilIndex < recoilPattern.verticalRecoil.Length &&
             currentRecoilIndex < recoilPattern.horizontalRecoil.Length)
         {
             float verticalRecoil = recoilPattern.verticalRecoil[currentRecoilIndex];
@@ -281,7 +301,7 @@ public class WeaponController : MonoBehaviour
 
     void HandleReloading()
     {
-        if (Input.GetKeyDown(KeyCode.R) && !isReloading)
+        if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting)
         {
             StartCoroutine(Reload());
         }
@@ -291,21 +311,8 @@ public class WeaponController : MonoBehaviour
     {
         isReloading = true;
         animator.SetBool("IsReloading", true);
-
-        // Optional: Add ammo count reset logic here
-
-        // Wait for the reload animation to finish
-        if (reloadAnimationClip != null)
-        {
-            yield return new WaitForSeconds(reloadAnimationClip.length);
-        }
-        else
-        {
-            // Fallback in case the animation clip is not assigned
-            yield return new WaitForSeconds(reloadDuration);
-            Debug.LogWarning("Reload Animation Clip not assigned. Using reloadDuration as fallback.");
-        }
-
+        PlayReloadingSound();
+        yield return new WaitForSeconds(reloadDuration);
         isReloading = false;
         animator.SetBool("IsReloading", false);
     }
@@ -321,7 +328,7 @@ public class WeaponController : MonoBehaviour
     void HandleGunPosition()
     {
         Vector3 verticalPosition = Vector3.Lerp(transform.localPosition, new Vector3(initialPosition.x, targetGunPosition.y, initialPosition.z), Time.deltaTime * loweringSpeed);
-        
+
         float swayX = -Input.GetAxis("Mouse X") * swayAmount;
         float swayY = -Input.GetAxis("Mouse Y") * swayAmount;
 
@@ -329,14 +336,14 @@ public class WeaponController : MonoBehaviour
         swayY = Mathf.Clamp(swayY, -maxSwayAmount, maxSwayAmount);
 
         Vector3 swayPosition = new Vector3(swayX, swayY, 0f);
-        
+
         transform.localPosition = Vector3.Lerp(verticalPosition, swayPosition + verticalPosition, Time.deltaTime * smoothAmount);
 
         float horizontalMovement = Input.GetAxis("Horizontal");
         float tiltZ = horizontalMovement * tiltAmount;
 
-        Quaternion targetRotation = Quaternion.Euler(0f, 0f, -tiltZ);
-        transform.localRotation = Quaternion.Slerp(transform.localRotation, initialRotation * targetRotation, Time.deltaTime * smoothAmount);
+        Quaternion targetRotationQuat = Quaternion.Euler(0f, 0f, -tiltZ);
+        transform.localRotation = Quaternion.Slerp(transform.localRotation, initialRotation * targetRotationQuat, Time.deltaTime * smoothAmount);
     }
 
     // Muzzle flash location transform for ADS
