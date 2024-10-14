@@ -134,6 +134,7 @@ public class PlayerMovement : MonoBehaviour
         HandleCameraBobbing();
         HandleJump();
         HandleCrouch();
+        UpdateGroundCheckPosition();
     }
 
     void FixedUpdate()
@@ -226,7 +227,7 @@ public class PlayerMovement : MonoBehaviour
         rb.velocity = newVelocity;
 
         // Handle walking and sprinting sounds
-        if (currentSpeed > 0 && isGrounded && !IsAiming)
+        if (currentSpeed > 0 && isGrounded && !IsAiming && !isCrouching)
         {
             if (currentSpeed == runSpeed)
             {
@@ -236,15 +237,10 @@ public class PlayerMovement : MonoBehaviour
             {
                 walkingAudioSource.pitch = 1f;
             }
-            else if (currentSpeed == crouchSpeed)
-            {
-                walkingAudioSource.pitch = 0.8f;
-            }
 
             if (!walkingAudioSource.isPlaying)
             {
                 walkingAudioSource.Play();
-                Debug.Log("Walking/Sprinting sound started.");
             }
         }
         else
@@ -253,9 +249,9 @@ public class PlayerMovement : MonoBehaviour
             {
                 walkingAudioSource.Stop();
                 walkingAudioSource.pitch = 1f;
-                Debug.Log("Walking/Sprinting sound stopped.");
             }
         }
+
     }
 
 
@@ -332,35 +328,22 @@ public class PlayerMovement : MonoBehaviour
         {
             if (isSliding)
             {
-                // **Cancel the slide if already sliding**
                 CancelSlide();
             }
             else
             {
                 if (isGrounded)
                 {
-                    // *** Check if the current speed is greater than walkSpeed before starting slide ***
                     if (lastGroundedSpeed > walkSpeed)
                     {
-                        // *** Start sliding immediately if grounded and speed is sufficient ***
                         StartSlide();
-                    }
-                    else
-                    {
-                        Debug.Log("Cannot start slide: Speed is not greater than walking speed.");
                     }
                 }
                 else
                 {
-                    // *** Request to slide upon landing only if lastGroundedSpeed is greater than walkSpeed ***
                     if (lastGroundedSpeed > walkSpeed)
                     {
                         requestedSlide = true;
-                        Debug.Log("Slide requested. Will initiate upon landing.");
-                    }
-                    else
-                    {
-                        Debug.Log("Cannot request slide: Speed is not greater than walking speed.");
                     }
                 }
             }
@@ -372,7 +355,7 @@ public class PlayerMovement : MonoBehaviour
         }
         else if (Input.GetKey(KeyCode.C) && isGrounded)
         {
-            // Existing crouch logic (without setting currentSpeed)
+            // Existing crouch logic
             playerCamera.localPosition = Vector3.Lerp(
                 playerCamera.localPosition,
                 new Vector3(playerCamera.localPosition.x, crouchHeight, playerCamera.localPosition.z),
@@ -386,13 +369,17 @@ public class PlayerMovement : MonoBehaviour
                 Time.deltaTime * crouchTransitionSpeed
             );
 
+            // Adjust groundCheck position
+            float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
+            groundCheck.localPosition = new Vector3(0, colliderBottom, 0);
+
             isCrouching = true;
         }
         else
         {
             if (!isSliding && !Input.GetKey(KeyCode.C))
             {
-                // Revert to standing if not sliding and crouch button is not held
+                // Revert to standing
                 playerCamera.localPosition = Vector3.Lerp(
                     playerCamera.localPosition,
                     new Vector3(playerCamera.localPosition.x, defaultHeight, playerCamera.localPosition.z),
@@ -400,10 +387,16 @@ public class PlayerMovement : MonoBehaviour
                 );
                 playerCollider.height = Mathf.Lerp(playerCollider.height, originalColliderHeight, Time.deltaTime * crouchTransitionSpeed);
                 playerCollider.center = Vector3.Lerp(playerCollider.center, originalColliderCenter, Time.deltaTime * crouchTransitionSpeed);
+
+                // Adjust groundCheck position
+                float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
+                groundCheck.localPosition = new Vector3(0, colliderBottom, 0);
+
                 isCrouching = false;
             }
         }
     }
+
 
     void StartSlide()
     {
@@ -536,6 +529,15 @@ public class PlayerMovement : MonoBehaviour
         ));
         StartCoroutine(AdjustColliderHeight(originalColliderHeight, slideTransitionSpeed));
     }
+
+    void UpdateGroundCheckPosition()
+    {
+        // Calculate the bottom position of the collider
+        float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
+        // Set groundCheck position relative to the player's position
+        groundCheck.position = transform.position + new Vector3(0, colliderBottom, 0);
+    }
+
 
     IEnumerator SmoothTransition(Vector3 from, Vector3 to, float speed)
     {
