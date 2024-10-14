@@ -1,36 +1,40 @@
 using UnityEngine;
-using UnityEngine.AI;  // For zombie movement using NavMesh
+using UnityEngine.AI;
+using System.Collections;
 
 public class MutantZombie : MonoBehaviour
 {
-    public Transform target;  // Set this to the DummyPlayer or player object later
-    public Animator animator;  // Reference to the zombie's animator
+    public Transform target;           // Set this to the DummyPlayer or player object later
+    public Animator animator;         // Reference to the zombie's animator
 
-    // Movement settings
-    public float moveSpeed = 3f;
-    public float rotationSpeed = 2f;
-    public float attackRange = 2f;  // Distance at which the zombie will attack
-    public float walkDistance = 15f; // Distance at which the zombie starts walking towards the target
-    public float stopDistance = 1.5f; // How close zombie gets to the player
+    public float attackRange = 2f;    // Distance at which the zombie will attack
+    public float walkDistance = 15f;  // Distance at which the zombie starts walking towards the target
 
-    private NavMeshAgent navAgent;  // NavMeshAgent to handle movement
+    private NavMeshAgent navAgent;    // NavMeshAgent to handle pathfinding
+    public float limpDistance = 0.5f; // The distance the zombie moves with each limp
+    public float limpDuration = 0.2f; // Duration for each limp movement
+
+    private bool isLimping = false;   // To avoid starting multiple limping movements at once
+
+    // Define states for clarity
+    private enum State { Idle, Walking, Limping, Attacking }
+    private State currentState = State.Idle;
 
     void Start()
     {
-        // Assign the NavMeshAgent component for movement
         navAgent = GetComponent<NavMeshAgent>();
-        navAgent.speed = moveSpeed;
 
-        // Disable automatic rotation of the agent
+        // Set the stopping distance to attack range
+        navAgent.stoppingDistance = attackRange;
+
+        // Disable automatic rotation updates of NavMeshAgent
         navAgent.updateRotation = false;
 
-        // Assign the dummy target (can be replaced with actual player later)
         if (target == null)
         {
             Debug.LogError("Target is not assigned!");
         }
 
-        // Make sure the animator is assigned
         if (animator == null)
         {
             animator = GetComponent<Animator>();
@@ -41,78 +45,150 @@ public class MutantZombie : MonoBehaviour
     {
         if (target != null)
         {
-            // Get distance to the target
             float distanceToTarget = Vector3.Distance(transform.position, target.position);
 
-            if (distanceToTarget <= walkDistance && distanceToTarget > stopDistance)
+            switch (currentState)
             {
-                // Move towards the target
-                navAgent.SetDestination(target.position);
+                case State.Idle:
+                    if (distanceToTarget <= walkDistance)
+                    {
+                        currentState = State.Walking;
+                        animator.SetBool("isWalking", true);
+                    }
+                    break;
 
-                // Rotate towards the target
-                RotateTowardsTarget();
+                case State.Walking:
+                    if (distanceToTarget > walkDistance)
+                    {
+                        currentState = State.Idle;
+                        animator.SetBool("isWalking", false);
+                        navAgent.ResetPath();
+                    }
+                    else if (distanceToTarget <= attackRange)
+                    {
+                        currentState = State.Attacking;
+                        animator.SetBool("isWalking", false);
+                        HandleAttack();
+                    }
+                    else
+                    {
+                        // Continue walking towards the target
+                        navAgent.SetDestination(target.position);
+                        RotateTowardsTarget();
+                        animator.SetBool("isWalking", true);
+                    }
+                    break;
 
-                // Handle movement animations
-                HandleMovementAnimations();
-            }
-            else if (distanceToTarget <= attackRange)
-            {
-                // Stop moving and attack
-                navAgent.SetDestination(transform.position);
-                HandleAttack();
-            }
-            else
-            {
-                // Stop all movement animations when out of range
-                animator.SetBool("isWalking", false);
-                navAgent.ResetPath();
+                case State.Attacking:
+                    if (distanceToTarget > attackRange)
+                    {
+                        currentState = State.Walking;
+                        animator.SetBool("isWalking", true);
+                    }
+                    else
+                    {
+                        // Continue attacking
+                        HandleAttack();
+                    }
+                    break;
+
             }
         }
     }
+
 
     void RotateTowardsTarget()
     {
-        // Get direction to the target
         Vector3 directionToTarget = (target.position - transform.position).normalized;
-        
-        // Calculate rotation towards the target
         Quaternion lookRotation = Quaternion.LookRotation(directionToTarget);
-        
-        // Smoothly rotate towards the target
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * rotationSpeed);
+        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f); // Smoothly rotate
     }
-
-    void HandleMovementAnimations()
-    {
-        // If the zombie is moving, play the walking animation
-        if (navAgent.velocity.magnitude > 0.1f)  // Check if there's enough movement
-        {
-            animator.SetBool("isWalking", true);
-        }
-        else
-        {
-            animator.SetBool("isWalking", false);
-        }
-    }
-
 
     void HandleAttack()
     {
-        // Trigger the attack animation
+        // Stop the NavMeshAgent from moving
+        navAgent.ResetPath();
+        navAgent.velocity = Vector3.zero;
+
+        // Trigger attack animation
         animator.SetTrigger("Attack");
     }
 
+    // Animation Event Handler for moving the zombie during the limp
+    public void LimpMove()
+    {
+        if (!isLimping && currentState != State.Limping)
+        {
+            // Start the limping movement as a coroutine
+            StartCoroutine(LimpTowardsTarget());
+        }
+    }
+
+    IEnumerator LimpTowardsTarget()
+    {
+        Debug.Log("LimpTowardsTarget coroutine started");
+        isLimping = true;
+        currentState = State.Limping;
+
+        // Completely disable the NavMeshAgent to prevent it from controlling movement
+        navAgent.enabled = false;
+
+        // Calculate the direction towards the target
+        Vector3 directionToTarget = (target.position - transform.position).normalized;
+
+        // Determine the limp destination
+        Vector3 limpDestination = transform.position + directionToTarget * limpDistance;
+
+        // Ensure the limp destination is on the NavMesh
+        NavMeshHit hit;
+        if (NavMesh.SamplePosition(limpDestination, out hit, limpDistance, NavMesh.AllAreas))
+        {
+            limpDestination = hit.position;
+        }
+
+        Vector3 startPosition = transform.position;
+        float elapsedTime = 0f;
+
+        // Move the zombie towards limpDestination over limpDuration
+        while (elapsedTime < limpDuration)
+        {
+            transform.position = Vector3.Lerp(startPosition, limpDestination, (elapsedTime / limpDuration));
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        // Ensure the final position is exact
+        transform.position = limpDestination;
+
+        // Re-enable the NavMeshAgent and set the new destination
+        navAgent.enabled = true;
+        navAgent.SetDestination(target.position);
+
+        currentState = State.Walking;
+        isLimping = false;
+
+        Debug.Log("LimpTowardsTarget coroutine ended");
+    }
+
+
     public void TakeDamage()
     {
-        // Play damage animation
         animator.SetTrigger("Damage");
     }
 
     public void Die()
     {
-        // Play death animation and disable movement
         animator.SetTrigger("Death");
-        navAgent.isStopped = true;  // Stop moving
-        this.enabled = false;  // Disable this script after death
+        this.enabled = false; // Disable this script after death
+    }
+
+    // Optional: Visualize attack and walk ranges in the Scene view
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, walkDistance);
     }
 }
