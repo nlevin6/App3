@@ -27,11 +27,11 @@ public class MutantZombie : MonoBehaviour
     private bool isLimping = false;
     private bool isStunned = false;
     private bool isDead = false;
+    private bool isAttacking = false;
 
     private enum State { Idle, Walking, Limping, Attacking, Stunned }
     private State currentState = State.Idle;
 
-    // MutantZombie despawning after death settings
     [Header("Sinking Settings")]
     public float sinkDelay = 3f;
     public float sinkDistance = 5f;
@@ -41,13 +41,15 @@ public class MutantZombie : MonoBehaviour
     public AudioClip footstepClip;
     public AudioClip damageClip;
     public AudioClip deathClip;
+    public AudioClip attackClip;
+    public AudioClip growlClip;
 
-    private AudioSource audioSource; // For playing sound effects
+    private AudioSource audioSource;
+    private AudioSource growlSource;
 
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
-
         navAgent.stoppingDistance = attackRange;
         navAgent.updateRotation = false;
 
@@ -62,68 +64,145 @@ public class MutantZombie : MonoBehaviour
         }
 
         currentHealth = maxHealth;
-
-        // Initialize AudioSource
         audioSource = GetComponent<AudioSource>();
+
+        if (audioSource == null)
+        {
+            Debug.LogError("AudioSource component is missing on MutantZombie!");
+        }
+
+        if (attackClip == null)
+        {
+            Debug.LogError("Attack Clip is not assigned in the Inspector!");
+        }
+
+        InitializeGrowlSource();
+    }
+
+    void InitializeGrowlSource()
+    {
+        if (growlClip == null)
+        {
+            Debug.LogError("Growl Clip is not assigned in the Inspector!");
+            return;
+        }
+
+        Transform existingGrowl = transform.Find("GrowlAudioSource");
+        if (existingGrowl != null)
+        {
+            growlSource = existingGrowl.GetComponent<AudioSource>();
+            if (growlSource == null)
+            {
+                growlSource = existingGrowl.gameObject.AddComponent<AudioSource>();
+            }
+        }
+        else
+        {
+            GameObject growlObject = new GameObject("GrowlAudioSource");
+            growlObject.transform.parent = this.transform;
+            growlSource = growlObject.AddComponent<AudioSource>();
+            growlSource.playOnAwake = false;
+            growlSource.loop = true;
+            growlSource.spatialBlend = 1.0f;
+        }
+
+        growlSource.clip = growlClip;
+        growlSource.volume = 1.0f;
     }
 
     void Update()
     {
-        if (target != null && !isStunned && !isDead)
+        if (isDead)
+        {
+            StopFootstepAndGrowl();
+            return;
+        }
+
+        if (target != null && !isStunned)
         {
             float distanceToTarget = Vector3.Distance(transform.position, target.position);
 
             switch (currentState)
             {
                 case State.Idle:
-                    if (audioSource.isPlaying) audioSource.Stop(); // Stop footsteps
+                    StopFootstepAndGrowl();
                     if (distanceToTarget <= walkDistance)
                     {
                         currentState = State.Walking;
                         animator.SetBool("isWalking", true);
                         navAgent.SetDestination(target.position);
                         RotateTowardsTarget();
+                        PlayFootstepAndGrowl();
                     }
                     break;
 
                 case State.Walking:
-                    if (!audioSource.isPlaying)
+                    if (!isAttacking)
                     {
-                        audioSource.clip = footstepClip;
-                        audioSource.loop = true;
-                        audioSource.Play(); // Play footsteps sound when walking
+                        if (!audioSource.isPlaying || audioSource.clip != footstepClip)
+                        {
+                            if (footstepClip != null)
+                            {
+                                audioSource.clip = footstepClip;
+                                audioSource.loop = true;
+                                audioSource.Play();
+                            }
+                            else
+                            {
+                                Debug.LogError("Footstep Clip is not assigned!");
+                            }
+                        }
+                        if (!growlSource.isPlaying)
+                        {
+                            PlayGrowlWithRandomStart();
+                        }
+                    }
+                    else
+                    {
+                        StopFootstepAndGrowl();
                     }
                     if (distanceToTarget > walkDistance)
                     {
                         currentState = State.Idle;
                         animator.SetBool("isWalking", false);
                         navAgent.ResetPath();
+                        StopFootstepAndGrowl();
                     }
                     else if (distanceToTarget <= attackRange)
                     {
                         currentState = State.Attacking;
                         animator.SetBool("isWalking", false);
-                        HandleAttack();
+                        isAttacking = false;
+                        StopFootstepAndGrowl();
                     }
                     else
                     {
                         navAgent.SetDestination(target.position);
                         RotateTowardsTarget();
                         animator.SetBool("isWalking", true);
+                        if (!growlSource.isPlaying)
+                        {
+                            PlayGrowlWithRandomStart();
+                        }
                     }
                     break;
 
                 case State.Attacking:
-                    if (audioSource.isPlaying) audioSource.Stop(); // Stop footsteps during attack
                     if (distanceToTarget > attackRange)
                     {
                         currentState = State.Walking;
                         animator.SetBool("isWalking", true);
                         navAgent.SetDestination(target.position);
+                        isAttacking = false;
+                        PlayFootstepAndGrowl();
                     }
                     else
                     {
-                        HandleAttack();
+                        RotateTowardsTarget();
+                        if (!isAttacking)
+                        {
+                            HandleAttack();
+                        }
                     }
                     break;
 
@@ -133,6 +212,75 @@ public class MutantZombie : MonoBehaviour
                 case State.Stunned:
                     break;
             }
+        }
+        else
+        {
+            StopFootstepAndGrowl();
+        }
+    }
+
+    void PlayGrowlWithRandomStart()
+    {
+        if (growlClip != null && growlSource != null)
+        {
+            float randomStartTime = Random.Range(0f, growlClip.length);
+            growlSource.time = randomStartTime;
+            growlSource.Play();
+        }
+        else
+        {
+            if (growlClip == null)
+                Debug.LogError("Growl Clip is not assigned!");
+            if (growlSource == null)
+                Debug.LogError("Growl AudioSource is not initialized!");
+        }
+    }
+
+    void PlayFootstepAndGrowl()
+    {
+        if (footstepClip != null && audioSource != null)
+        {
+            if (!audioSource.isPlaying || audioSource.clip != footstepClip)
+            {
+                audioSource.clip = footstepClip;
+                audioSource.loop = true;
+                audioSource.Play();
+            }
+        }
+        else
+        {
+            if (footstepClip == null)
+                Debug.LogError("Footstep Clip is not assigned!");
+            if (audioSource == null)
+                Debug.LogError("AudioSource is not assigned!");
+        }
+
+        if (growlClip != null && growlSource != null)
+        {
+            if (!growlSource.isPlaying)
+            {
+                PlayGrowlWithRandomStart();
+            }
+        }
+        else
+        {
+            if (growlClip == null)
+                Debug.LogError("Growl Clip is not assigned!");
+            if (growlSource == null)
+                Debug.LogError("Growl AudioSource is not initialized!");
+        }
+    }
+
+    void StopFootstepAndGrowl()
+    {
+        if (audioSource != null && audioSource.isPlaying && audioSource.clip == footstepClip)
+        {
+            audioSource.Stop();
+        }
+
+        if (growlSource != null && growlSource.isPlaying)
+        {
+            growlSource.Stop();
         }
     }
 
@@ -145,10 +293,57 @@ public class MutantZombie : MonoBehaviour
 
     void HandleAttack()
     {
+        if (isAttacking)
+            return;
+
+        isAttacking = true;
+
         navAgent.ResetPath();
         navAgent.velocity = Vector3.zero;
-
         animator.SetTrigger("Attack");
+
+        StopFootstepAndGrowl();
+
+        if (attackClip != null)
+        {
+            audioSource.PlayOneShot(attackClip);
+        }
+        else
+        {
+            Debug.LogError("Attack Clip is not assigned!");
+        }
+
+        StartCoroutine(ResetAttack());
+    }
+
+    IEnumerator ResetAttack()
+    {
+        AnimatorStateInfo attackStateInfo = animator.GetCurrentAnimatorStateInfo(0);
+        float attackDuration = attackStateInfo.length;
+
+        if (!attackStateInfo.IsName("Attack"))
+        {
+            attackDuration = 1.0f;
+        }
+
+        yield return new WaitForSeconds(attackDuration);
+
+        isAttacking = false;
+        if (currentState == State.Attacking && !isDead && !isStunned)
+        {
+            float distanceToTarget = Vector3.Distance(transform.position, target.position);
+            if (distanceToTarget > attackRange)
+            {
+                currentState = State.Walking;
+                animator.SetBool("isWalking", true);
+                navAgent.SetDestination(target.position);
+                PlayFootstepAndGrowl();
+            }
+            else
+            {
+                HandleAttack();
+            }
+        }
     }
 
     public void LimpMove()
@@ -161,7 +356,6 @@ public class MutantZombie : MonoBehaviour
 
     IEnumerator LimpTowardsTarget()
     {
-        Debug.Log("LimpTowardsTarget coroutine started");
         isLimping = true;
         currentState = State.Limping;
 
@@ -194,8 +388,7 @@ public class MutantZombie : MonoBehaviour
 
         currentState = State.Walking;
         isLimping = false;
-
-        Debug.Log("LimpTowardsTarget coroutine ended");
+        PlayFootstepAndGrowl();
     }
 
     public void TakeDamage(float damage)
@@ -204,10 +397,17 @@ public class MutantZombie : MonoBehaviour
             return;
 
         currentHealth -= damage;
-        Debug.Log($"{gameObject.name} took {damage} damage. Remaining health: {currentHealth}");
-
-        // Play damage sound
-        audioSource.PlayOneShot(damageClip);
+        if (damageClip != null && audioSource != null)
+        {
+            audioSource.PlayOneShot(damageClip);
+        }
+        else
+        {
+            if (damageClip == null)
+                Debug.LogError("Damage Clip is not assigned!");
+            if (audioSource == null)
+                Debug.LogError("AudioSource is not assigned!");
+        }
 
         if (currentHealth <= 0f && !isDead)
         {
@@ -236,6 +436,8 @@ public class MutantZombie : MonoBehaviour
             isLimping = false;
         }
 
+        StopFootstepAndGrowl();
+
         yield return new WaitForSeconds(stunDuration);
 
         navAgent.enabled = true;
@@ -245,13 +447,14 @@ public class MutantZombie : MonoBehaviour
         {
             currentState = State.Attacking;
             animator.SetBool("isWalking", false);
-            HandleAttack();
+            isAttacking = false;
         }
         else if (distanceToTarget <= walkDistance)
         {
             currentState = State.Walking;
             animator.SetBool("isWalking", true);
             navAgent.SetDestination(target.position);
+            PlayFootstepAndGrowl();
         }
         else
         {
@@ -266,9 +469,30 @@ public class MutantZombie : MonoBehaviour
     public void Die()
     {
         animator.SetTrigger("Death");
+        if (deathClip != null && audioSource != null)
+        {
+            audioSource.Stop();
+            audioSource.PlayOneShot(deathClip);
+        }
+        else
+        {
+            if (deathClip == null)
+                Debug.LogError("Death Clip is not assigned!");
+            if (audioSource == null)
+                Debug.LogError("AudioSource is not assigned!");
+        }
 
-        // Play death sound
-        audioSource.PlayOneShot(deathClip);
+        if (growlSource != null && growlSource.isPlaying)
+        {
+            growlSource.Stop();
+        }
+        else
+        {
+            if (growlSource == null)
+                Debug.LogError("Growl AudioSource is not assigned!");
+            else
+                Debug.Log("Growl sound was not playing.");
+        }
 
         Collider[] allColliders = GetComponentsInChildren<Collider>();
         foreach (Collider col in allColliders)
@@ -276,6 +500,12 @@ public class MutantZombie : MonoBehaviour
             col.enabled = false;
         }
         navAgent.enabled = false;
+
+        if (growlSource != null)
+        {
+            growlSource.gameObject.SetActive(false);
+        }
+
         this.enabled = false;
         StartCoroutine(SinkIntoFloor());
     }
@@ -283,9 +513,6 @@ public class MutantZombie : MonoBehaviour
     IEnumerator SinkIntoFloor()
     {
         yield return new WaitForSeconds(sinkDelay);
-
-        Debug.Log("Sinking into the floor...");
-
         Vector3 startPosition = transform.position;
         Vector3 endPosition = startPosition + Vector3.down * sinkDistance;
 
@@ -302,7 +529,6 @@ public class MutantZombie : MonoBehaviour
         Destroy(gameObject);
     }
 
-    // Visualize attack and walk ranges in the Scene view
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
