@@ -37,12 +37,18 @@ public class MutantZombie : MonoBehaviour
     public float sinkDistance = 5f;
     public float sinkDuration = 2f;
 
+    [Header("Audio Clips")]
+    public AudioClip footstepClip;
+    public AudioClip damageClip;
+    public AudioClip deathClip;
+
+    private AudioSource audioSource; // For playing sound effects
+
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
 
         navAgent.stoppingDistance = attackRange;
-
         navAgent.updateRotation = false;
 
         if (target == null)
@@ -56,6 +62,9 @@ public class MutantZombie : MonoBehaviour
         }
 
         currentHealth = maxHealth;
+
+        // Initialize AudioSource
+        audioSource = GetComponent<AudioSource>();
     }
 
     void Update()
@@ -67,6 +76,7 @@ public class MutantZombie : MonoBehaviour
             switch (currentState)
             {
                 case State.Idle:
+                    if (audioSource.isPlaying) audioSource.Stop(); // Stop footsteps
                     if (distanceToTarget <= walkDistance)
                     {
                         currentState = State.Walking;
@@ -77,6 +87,12 @@ public class MutantZombie : MonoBehaviour
                     break;
 
                 case State.Walking:
+                    if (!audioSource.isPlaying)
+                    {
+                        audioSource.clip = footstepClip;
+                        audioSource.loop = true;
+                        audioSource.Play(); // Play footsteps sound when walking
+                    }
                     if (distanceToTarget > walkDistance)
                     {
                         currentState = State.Idle;
@@ -98,6 +114,7 @@ public class MutantZombie : MonoBehaviour
                     break;
 
                 case State.Attacking:
+                    if (audioSource.isPlaying) audioSource.Stop(); // Stop footsteps during attack
                     if (distanceToTarget > attackRange)
                     {
                         currentState = State.Walking;
@@ -133,6 +150,7 @@ public class MutantZombie : MonoBehaviour
 
         animator.SetTrigger("Attack");
     }
+
     public void LimpMove()
     {
         if (!isLimping && currentState != State.Limping && !isStunned && !isDead)
@@ -187,6 +205,9 @@ public class MutantZombie : MonoBehaviour
 
         currentHealth -= damage;
         Debug.Log($"{gameObject.name} took {damage} damage. Remaining health: {currentHealth}");
+
+        // Play damage sound
+        audioSource.PlayOneShot(damageClip);
 
         if (currentHealth <= 0f && !isDead)
         {
@@ -245,6 +266,10 @@ public class MutantZombie : MonoBehaviour
     public void Die()
     {
         animator.SetTrigger("Death");
+
+        // Play death sound
+        audioSource.PlayOneShot(deathClip);
+
         Collider[] allColliders = GetComponentsInChildren<Collider>();
         foreach (Collider col in allColliders)
         {
@@ -277,7 +302,7 @@ public class MutantZombie : MonoBehaviour
         Destroy(gameObject);
     }
 
-    //Visualize attack and walk ranges in the Scene view
+    // Visualize attack and walk ranges in the Scene view
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
