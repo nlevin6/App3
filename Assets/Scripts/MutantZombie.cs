@@ -4,30 +4,45 @@ using System.Collections;
 
 public class MutantZombie : MonoBehaviour
 {
-    public Transform target;           // Set this to the DummyPlayer or player object later
-    public Animator animator;         // Reference to the zombie's animator
+    [Header("Target and Animator")]
+    public Transform target;
+    public Animator animator;
 
-    public float attackRange = 2f;    // Distance at which the zombie will attack
-    public float walkDistance = 15f;  // Distance at which the zombie starts walking towards the target
+    [Header("Movement Settings")]
+    public float attackRange = 2f;
+    public float walkDistance = 15f;
 
-    private NavMeshAgent navAgent;    // NavMeshAgent to handle pathfinding
-    public float limpDistance = 0.5f; // The distance the zombie moves with each limp
-    public float limpDuration = 0.2f; // Duration for each limp movement
+    [Header("Limping Settings")]
+    public float limpDistance = 0.5f;
+    public float limpDuration = 0.2f;
 
-    private bool isLimping = false;   // To avoid starting multiple limping movements at once
+    [Header("Health Settings")]
+    public float maxHealth = 100f;
+    private float currentHealth;
 
-    // Define states for clarity
-    private enum State { Idle, Walking, Limping, Attacking }
+    [Header("Stun Settings")]
+    public float stunDuration = 1f;
+
+    private NavMeshAgent navAgent;
+    private bool isLimping = false;
+    private bool isStunned = false;
+    private bool isDead = false;
+
+    private enum State { Idle, Walking, Limping, Attacking, Stunned }
     private State currentState = State.Idle;
+
+    // MutantZombie despawning after death settings
+    [Header("Sinking Settings")]
+    public float sinkDelay = 3f;
+    public float sinkDistance = 5f;
+    public float sinkDuration = 2f;
 
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
 
-        // Set the stopping distance to attack range
         navAgent.stoppingDistance = attackRange;
 
-        // Disable automatic rotation updates of NavMeshAgent
         navAgent.updateRotation = false;
 
         if (target == null)
@@ -39,11 +54,13 @@ public class MutantZombie : MonoBehaviour
         {
             animator = GetComponent<Animator>();
         }
+
+        currentHealth = maxHealth;
     }
 
     void Update()
     {
-        if (target != null)
+        if (target != null && !isStunned && !isDead)
         {
             float distanceToTarget = Vector3.Distance(transform.position, target.position);
 
@@ -54,6 +71,8 @@ public class MutantZombie : MonoBehaviour
                     {
                         currentState = State.Walking;
                         animator.SetBool("isWalking", true);
+                        navAgent.SetDestination(target.position);
+                        RotateTowardsTarget();
                     }
                     break;
 
@@ -72,7 +91,6 @@ public class MutantZombie : MonoBehaviour
                     }
                     else
                     {
-                        // Continue walking towards the target
                         navAgent.SetDestination(target.position);
                         RotateTowardsTarget();
                         animator.SetBool("isWalking", true);
@@ -84,42 +102,41 @@ public class MutantZombie : MonoBehaviour
                     {
                         currentState = State.Walking;
                         animator.SetBool("isWalking", true);
+                        navAgent.SetDestination(target.position);
                     }
                     else
                     {
-                        // Continue attacking
                         HandleAttack();
                     }
                     break;
 
+                case State.Limping:
+                    break;
+
+                case State.Stunned:
+                    break;
             }
         }
     }
-
 
     void RotateTowardsTarget()
     {
         Vector3 directionToTarget = (target.position - transform.position).normalized;
         Quaternion lookRotation = Quaternion.LookRotation(directionToTarget);
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f); // Smoothly rotate
+        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
     }
 
     void HandleAttack()
     {
-        // Stop the NavMeshAgent from moving
         navAgent.ResetPath();
         navAgent.velocity = Vector3.zero;
 
-        // Trigger attack animation
         animator.SetTrigger("Attack");
     }
-
-    // Animation Event Handler for moving the zombie during the limp
     public void LimpMove()
     {
-        if (!isLimping && currentState != State.Limping)
+        if (!isLimping && currentState != State.Limping && !isStunned && !isDead)
         {
-            // Start the limping movement as a coroutine
             StartCoroutine(LimpTowardsTarget());
         }
     }
@@ -130,16 +147,12 @@ public class MutantZombie : MonoBehaviour
         isLimping = true;
         currentState = State.Limping;
 
-        // Completely disable the NavMeshAgent to prevent it from controlling movement
         navAgent.enabled = false;
 
-        // Calculate the direction towards the target
         Vector3 directionToTarget = (target.position - transform.position).normalized;
 
-        // Determine the limp destination
         Vector3 limpDestination = transform.position + directionToTarget * limpDistance;
 
-        // Ensure the limp destination is on the NavMesh
         NavMeshHit hit;
         if (NavMesh.SamplePosition(limpDestination, out hit, limpDistance, NavMesh.AllAreas))
         {
@@ -149,18 +162,15 @@ public class MutantZombie : MonoBehaviour
         Vector3 startPosition = transform.position;
         float elapsedTime = 0f;
 
-        // Move the zombie towards limpDestination over limpDuration
-        while (elapsedTime < limpDuration)
+        while (elapsedTime < limpDuration && !isStunned && !isDead)
         {
             transform.position = Vector3.Lerp(startPosition, limpDestination, (elapsedTime / limpDuration));
             elapsedTime += Time.deltaTime;
             yield return null;
         }
 
-        // Ensure the final position is exact
         transform.position = limpDestination;
 
-        // Re-enable the NavMeshAgent and set the new destination
         navAgent.enabled = true;
         navAgent.SetDestination(target.position);
 
@@ -170,19 +180,104 @@ public class MutantZombie : MonoBehaviour
         Debug.Log("LimpTowardsTarget coroutine ended");
     }
 
-
-    public void TakeDamage()
+    public void TakeDamage(float damage)
     {
-        animator.SetTrigger("Damage");
+        if (isDead)
+            return;
+
+        currentHealth -= damage;
+        Debug.Log($"{gameObject.name} took {damage} damage. Remaining health: {currentHealth}");
+
+        if (currentHealth <= 0f && !isDead)
+        {
+            isDead = true;
+            Die();
+        }
+        else
+        {
+            animator.SetTrigger("Damage");
+            StartCoroutine(Stun());
+        }
+    }
+
+    IEnumerator Stun()
+    {
+        isStunned = true;
+        currentState = State.Stunned;
+
+        navAgent.ResetPath();
+        navAgent.velocity = Vector3.zero;
+        navAgent.enabled = false;
+
+        if (isLimping)
+        {
+            StopCoroutine(LimpTowardsTarget());
+            isLimping = false;
+        }
+
+        yield return new WaitForSeconds(stunDuration);
+
+        navAgent.enabled = true;
+
+        float distanceToTarget = Vector3.Distance(transform.position, target.position);
+        if (distanceToTarget <= attackRange)
+        {
+            currentState = State.Attacking;
+            animator.SetBool("isWalking", false);
+            HandleAttack();
+        }
+        else if (distanceToTarget <= walkDistance)
+        {
+            currentState = State.Walking;
+            animator.SetBool("isWalking", true);
+            navAgent.SetDestination(target.position);
+        }
+        else
+        {
+            currentState = State.Idle;
+            animator.SetBool("isWalking", false);
+            navAgent.ResetPath();
+        }
+
+        isStunned = false;
     }
 
     public void Die()
     {
         animator.SetTrigger("Death");
-        this.enabled = false; // Disable this script after death
+        Collider[] allColliders = GetComponentsInChildren<Collider>();
+        foreach (Collider col in allColliders)
+        {
+            col.enabled = false;
+        }
+        navAgent.enabled = false;
+        this.enabled = false;
+        StartCoroutine(SinkIntoFloor());
     }
 
-    // Optional: Visualize attack and walk ranges in the Scene view
+    IEnumerator SinkIntoFloor()
+    {
+        yield return new WaitForSeconds(sinkDelay);
+
+        Debug.Log("Sinking into the floor...");
+
+        Vector3 startPosition = transform.position;
+        Vector3 endPosition = startPosition + Vector3.down * sinkDistance;
+
+        float elapsedTime = 0f;
+
+        while (elapsedTime < sinkDuration)
+        {
+            transform.position = Vector3.Lerp(startPosition, endPosition, elapsedTime / sinkDuration);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.position = endPosition;
+        Destroy(gameObject);
+    }
+
+    //Visualize attack and walk ranges in the Scene view
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;

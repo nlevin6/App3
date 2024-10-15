@@ -61,7 +61,6 @@ public class WeaponController : MonoBehaviour
     [Header("Impact Effect Settings")]
     public ImpactInfo[] ImpactElements = new ImpactInfo[0];
     public float BulletDistance = 100f;
-    public GameObject defaultImpactEffectPrefab;
 
     [Header("Raycast Settings")]
     public LayerMask hitLayers;
@@ -69,16 +68,22 @@ public class WeaponController : MonoBehaviour
     private Quaternion initialMuzzleRotation;
 
     [Header("Camera Settings")]
-    public Transform cameraTransform; // Assign "CameraRecoil" here
+    public Transform cameraTransform;
 
     public CrosshairController crosshairController;
 
-    // Additional variables for camera recoil
+    [Header("Damage Settings")]
+    public float bodyDamage = 10f;
+    public float headshotMultiplier = 2f;
+
+    [Header("Blood Effect Settings")]
+    public GameObject bloodEffectPrefab;
+
     private Vector3 currentCameraRecoil = Vector3.zero;
     private Vector3 recoilVelocity = Vector3.zero;
 
     [Header("Reload Settings")]
-    public float reloadDuration = 2f; // Duration of the reload in seconds
+    public float reloadDuration = 2f;
 
     void Start()
     {
@@ -95,20 +100,12 @@ public class WeaponController : MonoBehaviour
 
         if (cameraTransform == null)
         {
-            cameraTransform = Camera.main.transform.parent; // Assuming CameraRecoil is parent of Main Camera
+            cameraTransform = Camera.main.transform.parent;
             if (cameraTransform == null)
             {
                 Debug.LogError("CameraRecoil GameObject not found. Please assign it in the Inspector.");
             }
         }
-
-        // Optional: Remove if reload animation is not used
-        /*
-        if (reloadAnimationClip == null)
-        {
-            Debug.LogError("Reload Animation Clip is not assigned in the Inspector.");
-        }
-        */
     }
 
     void Update()
@@ -140,12 +137,12 @@ public class WeaponController : MonoBehaviour
             if (isGrounded && Input.GetKey(KeyCode.LeftShift) && Input.GetKey(KeyCode.W) && movement.magnitude >= 0.1f)
             {
                 isSprinting = true;
-                targetGunPosition = loweredGunPosition;  // Lower the gun when sprinting
+                targetGunPosition = loweredGunPosition;
             }
             else
             {
                 isSprinting = false;
-                targetGunPosition = initialPosition;  // Raise the gun back to the initial position when not sprinting
+                targetGunPosition = initialPosition;
             }
             if (movement.magnitude >= 0.1f)
             {
@@ -193,19 +190,16 @@ public class WeaponController : MonoBehaviour
         {
             PlayShootingSound();
             isShooting = true;
-            // Add crosshair and other firing effects
             animator.speed = fireRate / 10f;
             animator.SetBool("IsShooting", true);
             nextFireTime = Time.time + timeBetweenShots;
             FireWeapon();
 
-            // Notify CrosshairController that shooting has started
             if (crosshairController != null)
             {
                 crosshairController.StartShooting();
             }
 
-            // Apply recoil after each shot
             ApplyShootingRecoil();
         }
 
@@ -213,11 +207,10 @@ public class WeaponController : MonoBehaviour
         {
             isShooting = false;
             animator.SetBool("IsShooting", false);
-            animator.speed = 1f; // Reset the animation speed
-            currentRecoilIndex = 0; // Reset the recoil index when the player stops shooting
+            animator.speed = 1f;
+            currentRecoilIndex = 0;
             Debug.Log("Stopped shooting");
 
-            // Notify CrosshairController that shooting has stopped
             if (crosshairController != null)
             {
                 crosshairController.StopShooting();
@@ -234,7 +227,6 @@ public class WeaponController : MonoBehaviour
             return;
         }
 
-        // Instantiate muzzle flash if assigned
         if (muzzleFlashPrefab != null && muzzleTransform != null)
         {
             GameObject muzzleFlashInstance = Instantiate(muzzleFlashPrefab, muzzleTransform.position, muzzleTransform.rotation, muzzleTransform);
@@ -243,11 +235,9 @@ public class WeaponController : MonoBehaviour
             Destroy(muzzleFlashInstance, 0.5f);
         }
 
-        // Get the main camera's forward direction
         Camera mainCamera = Camera.main;
         Vector3 direction = mainCamera.transform.forward;
 
-        // Apply recoil to the direction based on the recoil pattern
         if (recoilPattern != null &&
             currentRecoilIndex < recoilPattern.verticalRecoil.Length &&
             currentRecoilIndex < recoilPattern.horizontalRecoil.Length)
@@ -255,16 +245,13 @@ public class WeaponController : MonoBehaviour
             float verticalRecoil = recoilPattern.verticalRecoil[currentRecoilIndex];
             float horizontalRecoil = recoilPattern.horizontalRecoil[currentRecoilIndex];
 
-            // Apply camera recoil by adjusting the recoil offset
             cameraRecoilOffset += new Vector3(-verticalRecoil, horizontalRecoil, 0f);
 
-            // Increment the recoil index for the next shot
             currentRecoilIndex++;
 
-            // **Loop the recoil pattern**
             if (currentRecoilIndex >= recoilPattern.verticalRecoil.Length)
             {
-                currentRecoilIndex = 0; // Reset index to loop the pattern
+                currentRecoilIndex = 0;
             }
         }
         else
@@ -272,7 +259,6 @@ public class WeaponController : MonoBehaviour
             Debug.LogWarning("RecoilPattern is not set or has no recoil steps.");
         }
 
-        // Perform raycast to detect hits
         RaycastHit hit;
         if (Physics.Raycast(mainCamera.transform.position, direction, out hit, BulletDistance, hitLayers))
         {
@@ -282,14 +268,40 @@ public class WeaponController : MonoBehaviour
                 GameObject impactInstance = Instantiate(impactEffect, hit.point, Quaternion.LookRotation(hit.normal));
                 Destroy(impactInstance, 20f);
             }
-            else if (defaultImpactEffectPrefab != null)
+
+            MutantZombie zombie = hit.transform.GetComponent<MutantZombie>();
+            if (zombie != null)
             {
-                GameObject defaultImpactInstance = Instantiate(defaultImpactEffectPrefab, hit.point, Quaternion.LookRotation(hit.normal));
-                Destroy(defaultImpactInstance, 20f);
+                float damage = bodyDamage;
+
+                if (hit.collider.CompareTag("Head"))
+                {
+                    damage *= headshotMultiplier;
+                    Debug.Log("Headshot! Damage: " + damage);
+                }
+                else if (hit.collider.CompareTag("Body"))
+                {
+                    Debug.Log("Body shot. Damage: " + damage);
+                }
+
+                zombie.TakeDamage(damage);
+
+                if (bloodEffectPrefab != null)
+                {
+                    InstantiateBloodEffect(hit);
+                }
+                else
+                {
+                    Debug.LogWarning("Blood Effect Prefab is not assigned in the Inspector.");
+                }
             }
         }
     }
-
+    
+    void InstantiateBloodEffect(RaycastHit hit)
+    {
+        GameObject bloodInstance = Instantiate(bloodEffectPrefab, hit.point, Quaternion.LookRotation(hit.normal));
+    }
 
     public void PlayShootingSound()
     {
@@ -346,7 +358,6 @@ public class WeaponController : MonoBehaviour
         transform.localRotation = Quaternion.Slerp(transform.localRotation, initialRotation * targetRotationQuat, Time.deltaTime * smoothAmount);
     }
 
-    // Muzzle flash location transform for ADS
     void HandleMuzzleTransform()
     {
         if (!isShooting)
@@ -368,7 +379,7 @@ public class WeaponController : MonoBehaviour
     {
         currentRecoilAmount += recoilAmount * Time.deltaTime;
         currentRecoilAmount = Mathf.Clamp(currentRecoilAmount, 0f, maxRecoilAmount);
-        float horizontalOscillation = Mathf.Sin(Time.time * fireRate) * Mathf.Clamp(currentRecoilAmount, 0f, maxRecoilAmount) * 2f; // Left-right movement (how much the gun recoils sideways)
+        float horizontalOscillation = Mathf.Sin(Time.time * fireRate) * Mathf.Clamp(currentRecoilAmount, 0f, maxRecoilAmount) * 2f;
         horizontalOscillation = Mathf.Clamp(horizontalOscillation, -maxHorizontalOscillation, maxHorizontalOscillation);
         float sidewaysRecoil = Random.Range(-sidewaysRecoilAmount, sidewaysRecoilAmount);
         sidewaysRecoil = Mathf.Clamp(sidewaysRecoil, -maxSidewaysRecoilAmount, maxSidewaysRecoilAmount);
@@ -377,8 +388,7 @@ public class WeaponController : MonoBehaviour
 
     void ApplyRecoil()
     {
-        // Apply recoil to the weapon
-        float horizontalOscillation = Mathf.Sin(Time.time * fireRate) * Mathf.Clamp(currentRecoilAmount, 0f, maxRecoilAmount) * 2f; // Oscillation (how much the gun swings left and right during shooting)
+        float horizontalOscillation = Mathf.Sin(Time.time * fireRate) * Mathf.Clamp(currentRecoilAmount, 0f, maxRecoilAmount) * 2f;
         horizontalOscillation = Mathf.Clamp(horizontalOscillation, -maxHorizontalOscillation, maxHorizontalOscillation);
 
         float sidewaysRecoil = Random.Range(-sidewaysRecoilAmount, sidewaysRecoilAmount);
@@ -393,14 +403,11 @@ public class WeaponController : MonoBehaviour
         Vector3 recoilOffset = new Vector3(-currentRecoilAmount, horizontalOscillation, sidewaysRecoil);
         transform.localRotation = Quaternion.Slerp(transform.localRotation, Quaternion.Euler(initialRotation.eulerAngles + recoilOffset), Time.deltaTime * smoothAmount);
 
-        // Apply recoil to the camera
         if (cameraTransform != null)
         {
-            // Smoothly interpolate the current recoil towards the target recoil
             currentCameraRecoil = Vector3.SmoothDamp(currentCameraRecoil, cameraRecoilOffset, ref recoilVelocity, 1f / recoilSmoothing);
             cameraTransform.localRotation = Quaternion.Euler(currentCameraRecoil);
 
-            // Gradually reduce the recoil offset over time
             cameraRecoilOffset = Vector3.Lerp(cameraRecoilOffset, Vector3.zero, Time.deltaTime * recoilDecayRate);
         }
     }
@@ -424,7 +431,6 @@ public class WeaponController : MonoBehaviour
                 return impactInfo.ImpactEffect;
         }
 
-        // If no matching material type is found
         return null;
     }
 }
