@@ -277,11 +277,9 @@ public class WeaponController : MonoBehaviour
                 if (hit.collider.CompareTag("Head"))
                 {
                     damage *= headshotMultiplier;
-                    Debug.Log("Headshot! Damage: " + damage);
                 }
                 else if (hit.collider.CompareTag("Body"))
                 {
-                    Debug.Log("Body shot. Damage: " + damage);
                 }
 
                 zombie.TakeDamage(damage);
