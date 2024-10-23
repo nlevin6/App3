@@ -1,7 +1,11 @@
-# This .gitignore file should be placed at the root of your Unity project directory
-#
-# Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
-#
+# Ignore everything in the Assets folder
+/Assets/**
+
+# Except the Scripts folder
+!/Assets/Scripts/
+!/Assets/Scripts/**
+
+# Unity specific ignores
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -10,11 +14,7 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 
-# MemoryCaptures can get excessive in size.
-# They also could contain extremely sensitive data
 /[Mm]emoryCaptures/
-
-# Recordings can get excessive in size
 /[Rr]ecordings/
 
 # Uncomment this line if you wish to ignore the asset store tools plugin
@@ -70,7 +70,3 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
-
-# Ignore everything in the Assets folder except Scripts
-/Assets/*
-!/Assets/Scripts/

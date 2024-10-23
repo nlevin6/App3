@@ -35,6 +35,13 @@ public class PlayerMovement : MonoBehaviour
     public AudioSource walkingAudioSource;
     public AudioSource slideAudioSource;
 
+    [Header("Physics Settings")]
+    public float stickToGroundForce = 10f;
+
+    [Header("Physics Materials")]
+    public PhysicMaterial highFrictionMaterial;
+    public PhysicMaterial lowFrictionMaterial;
+
     private Rigidbody rb;
     private float xRotation = 0f;
     private float currentSpeed;
@@ -72,6 +79,13 @@ public class PlayerMovement : MonoBehaviour
     private Vector3 airMoveDirection = Vector3.zero;
     private bool wasGrounded = true;
 
+    private float mouseXInput = 0f;
+    private float mouseYInput = 0f;
+
+    private bool isJumping = false;
+
+    private Vector3 groundNormal = Vector3.up; // Added for ground normal tracking
+
     void Start()
     {
         rb = GetComponent<Rigidbody>();
@@ -84,49 +98,29 @@ public class PlayerMovement : MonoBehaviour
         currentBobbingAmount = bobbingAmount;
         defaultCameraYPos = playerCamera.localPosition.y;
         defaultHeight = playerCamera.localPosition.y;
-
         originalColliderHeight = playerCollider.height;
         originalColliderCenter = playerCollider.center;
         originalCameraPosition = playerCamera.localPosition;
-
-        if (walkingAudioSource == null)
-        {
-            Debug.LogError("Walking AudioSource is not assigned. Please assign it in the Inspector.");
-        }
-        if (slideAudioSource == null)
-        {
-            Debug.LogError("Slide AudioSource is not assigned. Please assign it in the Inspector.");
-        }
-
         if (walkingAudioSource != null && walkingSound != null)
         {
             walkingAudioSource.clip = walkingSound;
             walkingAudioSource.loop = true;
         }
-        else
-        {
-            Debug.LogError("Walking AudioSource or Walking Sound AudioClip is not assigned.");
-        }
-
         if (slideAudioSource != null && slidingSound != null)
         {
             slideAudioSource.clip = slidingSound;
             slideAudioSource.loop = true;
             slideAudioSource.playOnAwake = false;
         }
-        else
-        {
-            Debug.LogError("Slide AudioSource or Sliding Sound AudioClip is not assigned.");
-        }
-
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.constraints = RigidbodyConstraints.FreezeRotation;
+        rb.drag = 0f; // Adjusted drag if needed
     }
 
     void Update()
     {
-        HandleMouseLook();
+        HandleMouseLookInput();
         HandleCameraBobbing();
         HandleJump();
         HandleCrouch();
@@ -136,7 +130,8 @@ public class PlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         HandleMovement();
-
+        HandleRotation();
+        UpdatePhysicsMaterial(); // Added to switch physics materials
         if (requestedSlide && isGrounded && !isSliding)
         {
             StartSlide();
@@ -144,27 +139,33 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    void HandleMouseLook()
+    void LateUpdate()
     {
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
-
-        xRotation -= mouseY;
-        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
-
         playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
-        transform.Rotate(Vector3.up * mouseX);
+    }
+
+    void HandleMouseLookInput()
+    {
+        mouseXInput = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
+        mouseYInput = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
+        xRotation -= mouseYInput;
+        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+    }
+
+    void HandleRotation()
+    {
+        Quaternion deltaRotation = Quaternion.Euler(0f, mouseXInput, 0f);
+        rb.MoveRotation(rb.rotation * deltaRotation);
     }
 
     void HandleMovement()
     {
         isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
-
         float x = Input.GetAxis("Horizontal");
         float z = Input.GetAxis("Vertical");
-
         Vector3 inputMove = transform.right * x + transform.forward * z;
         Vector3 move;
+        RaycastHit hitInfo;
 
         if (isGrounded)
         {
@@ -173,13 +174,13 @@ public class PlayerMovement : MonoBehaviour
                 wasGrounded = true;
                 airMoveDirection = Vector3.zero;
             }
-
             if (IsAiming)
             {
                 currentSpeed = walkSpeed;
             }
             else if (isSliding)
             {
+                // Sliding logic
             }
             else if (isCrouching)
             {
@@ -189,18 +190,22 @@ public class PlayerMovement : MonoBehaviour
             {
                 currentSpeed = (Input.GetKey(KeyCode.LeftShift) && z > 0 && !isCrouching) ? runSpeed : walkSpeed;
             }
-
             if (inputMove.magnitude > 1f)
             {
                 inputMove.Normalize();
             }
-
             if (inputMove.magnitude == 0 && !isSliding)
             {
                 currentSpeed = 0f;
             }
-
             lastGroundedSpeed = currentSpeed;
+
+            if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out hitInfo, groundDistance + 1f, groundMask))
+            {
+                groundNormal = hitInfo.normal; // Store ground normal
+                inputMove = Vector3.ProjectOnPlane(inputMove, groundNormal).normalized;
+            }
+
             move = inputMove;
         }
         else
@@ -210,7 +215,6 @@ public class PlayerMovement : MonoBehaviour
                 airMoveDirection = inputMove.normalized;
                 wasGrounded = false;
             }
-
             move = airMoveDirection;
             currentSpeed = lastGroundedSpeed;
         }
@@ -219,6 +223,25 @@ public class PlayerMovement : MonoBehaviour
         Vector3 currentVelocity = rb.velocity;
         Vector3 newVelocity = new Vector3(desiredVelocity.x, currentVelocity.y, desiredVelocity.z);
         rb.velocity = newVelocity;
+
+        if (isGrounded && !isJumping)
+        {
+            rb.AddForce(-groundNormal * stickToGroundForce, ForceMode.Acceleration); // Adjusted force direction
+        }
+
+        if (!isGrounded)
+        {
+            isJumping = false;
+        }
+
+        // Zero out horizontal velocity when stationary
+        if (isGrounded && inputMove.magnitude == 0f && !isSliding)
+        {
+            Vector3 velocity = rb.velocity;
+            velocity.x = 0f;
+            velocity.z = 0f;
+            rb.velocity = velocity;
+        }
 
         if (currentSpeed > 0 && isGrounded && !IsAiming && !isCrouching)
         {
@@ -230,7 +253,6 @@ public class PlayerMovement : MonoBehaviour
             {
                 walkingAudioSource.pitch = 1f;
             }
-
             if (!walkingAudioSource.isPlaying)
             {
                 walkingAudioSource.Play();
@@ -244,9 +266,7 @@ public class PlayerMovement : MonoBehaviour
                 walkingAudioSource.pitch = 1f;
             }
         }
-
     }
-
 
     void HandleCameraBobbing()
     {
@@ -255,7 +275,6 @@ public class PlayerMovement : MonoBehaviour
             playerCamera.localPosition = new Vector3(playerCamera.localPosition.x, slideHeight, playerCamera.localPosition.z);
             return;
         }
-
         bool isMoving = false;
         if (isGrounded)
         {
@@ -265,12 +284,10 @@ public class PlayerMovement : MonoBehaviour
         {
             isMoving = airMoveDirection.magnitude > 0.1f;
         }
-
         if (isMoving)
         {
             float bobbingSpeed;
             float bobbingAmountLocal;
-
             if (isSliding)
             {
                 bobbingSpeed = runBobbingSpeed;
@@ -281,7 +298,6 @@ public class PlayerMovement : MonoBehaviour
                 bobbingSpeed = (currentSpeed == runSpeed) ? runBobbingSpeed : currentBobbingSpeed;
                 bobbingAmountLocal = (isCrouching) ? crouchBobbingAmount : currentBobbingAmount;
             }
-
             bobbingTimer += Time.deltaTime * bobbingSpeed;
             float newCameraYPos = defaultCameraYPos + Mathf.Sin(bobbingTimer) * bobbingAmountLocal;
             playerCamera.localPosition = new Vector3(playerCamera.localPosition.x, newCameraYPos, playerCamera.localPosition.z);
@@ -304,6 +320,7 @@ public class PlayerMovement : MonoBehaviour
             else if (isGrounded && !isCrouching)
             {
                 rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+                isJumping = true;
             }
         }
     }
@@ -334,7 +351,6 @@ public class PlayerMovement : MonoBehaviour
                 }
             }
         }
-
         if (isSliding)
         {
             ContinueSlide();
@@ -346,17 +362,14 @@ public class PlayerMovement : MonoBehaviour
                 new Vector3(playerCamera.localPosition.x, crouchHeight, playerCamera.localPosition.z),
                 Time.deltaTime * crouchTransitionSpeed
             );
-
             playerCollider.height = Mathf.Lerp(playerCollider.height, crouchColliderHeight, Time.deltaTime * crouchTransitionSpeed);
             playerCollider.center = Vector3.Lerp(
                 playerCollider.center,
                 new Vector3(0, crouchColliderHeight / 2f, 0),
                 Time.deltaTime * crouchTransitionSpeed
             );
-
             float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
             groundCheck.localPosition = new Vector3(0, colliderBottom, 0);
-
             isCrouching = true;
         }
         else
@@ -370,52 +383,37 @@ public class PlayerMovement : MonoBehaviour
                 );
                 playerCollider.height = Mathf.Lerp(playerCollider.height, originalColliderHeight, Time.deltaTime * crouchTransitionSpeed);
                 playerCollider.center = Vector3.Lerp(playerCollider.center, originalColliderCenter, Time.deltaTime * crouchTransitionSpeed);
-
                 float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
                 groundCheck.localPosition = new Vector3(0, colliderBottom, 0);
-
                 isCrouching = false;
             }
         }
     }
 
-
     void StartSlide()
     {
         if (!isGrounded)
         {
-            Debug.LogWarning("Cannot start slide: Player is not grounded.");
             return;
         }
-
         if (lastGroundedSpeed <= walkSpeed)
         {
-            Debug.Log("Cannot start slide: Speed is not greater than walking speed.");
             return;
         }
-
         isSliding = true;
         slideTimerInternal = slideDuration;
-
         initialSlideSpeed = walkSpeed * slideSpeedMultiplier;
         currentSpeed = initialSlideSpeed;
-
         isCrouching = true;
-
-        Debug.Log("Slide started.");
-
         if (slideAudioSource != null && slidingSound != null)
         {
             slideAudioSource.Play();
-            Debug.Log("Sliding sound started.");
         }
-
         StartCoroutine(SmoothTransition(
             playerCamera.localPosition,
             new Vector3(playerCamera.localPosition.x, slideHeight, playerCamera.localPosition.z),
             slideTransitionSpeed
         ));
-
         StartCoroutine(AdjustColliderHeight(crouchColliderHeight, slideTransitionSpeed));
     }
 
@@ -424,9 +422,7 @@ public class PlayerMovement : MonoBehaviour
         if (slideTimerInternal > 0)
         {
             float speedDecayFactor = slideTimerInternal / slideDuration;
-
             currentSpeed = Mathf.Lerp(crouchSpeed, initialSlideSpeed, speedDecayFactor);
-
             slideTimerInternal -= Time.deltaTime;
         }
         else
@@ -438,28 +434,20 @@ public class PlayerMovement : MonoBehaviour
     void EndSlide()
     {
         isSliding = false;
-
         currentSpeed = crouchSpeed;
-
         if (!Input.GetKey(KeyCode.C))
         {
             isCrouching = false;
         }
-
-        Debug.Log("Slide ended.");
-
         if (slideAudioSource != null)
         {
             slideAudioSource.Stop();
-            Debug.Log("Sliding sound stopped.");
         }
-
         StartCoroutine(SmoothTransition(
             playerCamera.localPosition,
             originalCameraPosition,
             slideTransitionSpeed
         ));
-
         StartCoroutine(AdjustColliderHeight(originalColliderHeight, slideTransitionSpeed));
     }
 
@@ -467,7 +455,6 @@ public class PlayerMovement : MonoBehaviour
     {
         isSliding = false;
         slideTimerInternal = 0f;
-
         if (Input.GetKey(KeyCode.LeftShift) && IsGrounded && !isCrouching)
         {
             currentSpeed = runSpeed;
@@ -476,7 +463,6 @@ public class PlayerMovement : MonoBehaviour
         {
             currentSpeed = walkSpeed;
         }
-
         if (!Input.GetKey(KeyCode.C))
         {
             isCrouching = false;
@@ -484,7 +470,6 @@ public class PlayerMovement : MonoBehaviour
         if (slideAudioSource != null)
         {
             slideAudioSource.Stop();
-            Debug.Log("Sliding sound stopped.");
         }
         StartCoroutine(SmoothTransition(
             playerCamera.localPosition,
@@ -499,7 +484,6 @@ public class PlayerMovement : MonoBehaviour
         float colliderBottom = playerCollider.center.y - (playerCollider.height / 2f);
         groundCheck.position = transform.position + new Vector3(0, colliderBottom, 0);
     }
-
 
     IEnumerator SmoothTransition(Vector3 from, Vector3 to, float speed)
     {
@@ -518,10 +502,7 @@ public class PlayerMovement : MonoBehaviour
         float elapsed = 0f;
         float startingHeight = playerCollider.height;
         Vector3 startingCenter = playerCollider.center;
-
         Vector3 targetCenter = new Vector3(0, targetHeight / 2f, 0);
-        Vector3 startingColliderCenter = playerCollider.center;
-
         while (elapsed < 1f)
         {
             playerCollider.height = Mathf.Lerp(startingHeight, targetHeight, elapsed);
@@ -529,8 +510,19 @@ public class PlayerMovement : MonoBehaviour
             elapsed += Time.deltaTime * speed;
             yield return null;
         }
-
         playerCollider.height = targetHeight;
         playerCollider.center = targetCenter;
+    }
+
+    void UpdatePhysicsMaterial()
+    {
+        if (isGrounded && rb.velocity.magnitude < 0.1f && !isSliding)
+        {
+            playerCollider.material = highFrictionMaterial;
+        }
+        else
+        {
+            playerCollider.material = lowFrictionMaterial;
+        }
     }
 }
