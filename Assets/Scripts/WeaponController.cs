@@ -3,6 +3,7 @@ using System.Collections;
 
 public class WeaponController : MonoBehaviour
 {
+    public ScopedWeapon scopedWeapon;
     [Header("Recoil Pattern Settings")]
     public RecoilPattern recoilPattern;
     private int currentRecoilIndex = 0;
@@ -42,11 +43,14 @@ public class WeaponController : MonoBehaviour
     private Vector3 cameraRecoilOffset;
 
     [Header("Firing Settings")]
+    public int bulletAmount = 3;
+    private int reloadBulletAmount;
     public float fireRate = 10f;
     private float nextFireTime = 0f;
 
     [Header("Gun Position Settings")]
     public Vector3 loweredGunPosition = new Vector3(0, -0.5f, 0);
+    public Vector3 adsGunPosition = new Vector3(0, -1f, 0);
     public float loweringSpeed = 5f;
     private Vector3 targetGunPosition;
 
@@ -88,6 +92,7 @@ public class WeaponController : MonoBehaviour
     void Start()
     {
         playerMovement = FindObjectOfType<PlayerMovement>();
+        scopedWeapon = GetComponent<ScopedWeapon>();
         if (audioSource == null)
             audioSource = GetComponent<AudioSource>();
 
@@ -97,6 +102,8 @@ public class WeaponController : MonoBehaviour
         initialPosition = transform.localPosition;
         initialRotation = transform.localRotation;
         targetGunPosition = initialPosition;
+
+        reloadBulletAmount = bulletAmount;
 
         if (cameraTransform == null)
         {
@@ -167,7 +174,14 @@ public class WeaponController : MonoBehaviour
 
     void HandleAiming()
     {
-        isAiming = Input.GetMouseButton(1);
+        if (isReloading)
+        {
+            isAiming = false;
+        }
+        else
+        {
+            isAiming = Input.GetMouseButton(1);
+        }
 
         if (isAiming)
         {
@@ -175,32 +189,56 @@ public class WeaponController : MonoBehaviour
             {
                 isSprinting = false;
                 speed = playerMovement.WalkSpeed;
-                targetGunPosition = initialPosition;
+                targetGunPosition = adsGunPosition;
             }
+        }
+        else
+        {
+            targetGunPosition = initialPosition;
         }
 
         playerMovement.IsAiming = isAiming;
         animator.SetBool("IsAiming", isAiming);
     }
 
+
     void HandleShooting()
     {
         float timeBetweenShots = 1f / fireRate;
+
         if (Input.GetMouseButton(0) && Time.time >= nextFireTime && !isReloading)
         {
-            PlayShootingSound();
-            isShooting = true;
-            animator.speed = fireRate / 10f;
-            animator.SetBool("IsShooting", true);
-            nextFireTime = Time.time + timeBetweenShots;
-            FireWeapon();
-
-            if (crosshairController != null)
+            if (bulletAmount > 0)
             {
-                crosshairController.StartShooting();
-            }
+                PlayShootingSound();
+                isShooting = true;
+                bulletAmount--;
+                animator.speed = fireRate / 10f;
+                animator.SetBool("IsShooting", true);
+                nextFireTime = Time.time + timeBetweenShots;
+                FireWeapon();
 
-            ApplyShootingRecoil();
+                if (crosshairController != null)
+                {
+                    crosshairController.StartShooting();
+                }
+
+                ApplyShootingRecoil();
+            }
+            else if (!isReloading)
+            {
+                isShooting = false;
+                animator.SetBool("IsShooting", false);
+                animator.speed = 1f;
+                currentRecoilIndex = 0;
+
+                if (crosshairController != null)
+                {
+                    crosshairController.StopShooting();
+                }
+
+                StartCoroutine(Reload());
+            }
         }
 
         if (Input.GetMouseButtonUp(0))
@@ -209,7 +247,6 @@ public class WeaponController : MonoBehaviour
             animator.SetBool("IsShooting", false);
             animator.speed = 1f;
             currentRecoilIndex = 0;
-            Debug.Log("Stopped shooting");
 
             if (crosshairController != null)
             {
@@ -320,10 +357,24 @@ public class WeaponController : MonoBehaviour
     private IEnumerator Reload()
     {
         isReloading = true;
+
+        if (scopedWeapon != null)
+        {
+            scopedWeapon.isReloading = true;
+        }
+
         animator.SetBool("IsReloading", true);
         PlayReloadingSound();
         yield return new WaitForSeconds(reloadDuration);
+
+        bulletAmount = reloadBulletAmount;
         isReloading = false;
+        
+        if (scopedWeapon != null)
+        {
+            scopedWeapon.isReloading = false;
+        }
+
         animator.SetBool("IsReloading", false);
     }
 
@@ -337,7 +388,7 @@ public class WeaponController : MonoBehaviour
 
     void HandleGunPosition()
     {
-        Vector3 verticalPosition = Vector3.Lerp(transform.localPosition, new Vector3(initialPosition.x, targetGunPosition.y, initialPosition.z), Time.deltaTime * loweringSpeed);
+        Vector3 verticalPosition = Vector3.Lerp(transform.localPosition, targetGunPosition, Time.deltaTime * loweringSpeed);
 
         float swayX = -Input.GetAxis("Mouse X") * swayAmount;
         float swayY = -Input.GetAxis("Mouse Y") * swayAmount;
