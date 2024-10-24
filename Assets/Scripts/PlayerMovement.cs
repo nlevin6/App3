@@ -28,6 +28,9 @@ public class PlayerMovement : MonoBehaviour
     public float slideSpeedMultiplier = 1.5f;
     public float slideHeight = 0.5f;
     public float slideTransitionSpeed = 10f;
+    public float slideCooldown = 1.5f;
+
+    private float slideCooldownTimer = 0f;
 
     [Header("Audio Settings")]
     public AudioClip walkingSound;
@@ -125,6 +128,7 @@ public class PlayerMovement : MonoBehaviour
         HandleJump();
         HandleCrouch();
         UpdateGroundCheckPosition();
+        UpdateSlideCooldown();
     }
 
     void FixedUpdate()
@@ -152,10 +156,12 @@ public class PlayerMovement : MonoBehaviour
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
     }
 
-    void HandleRotation()
+    void UpdateSlideCooldown()
     {
-        Quaternion deltaRotation = Quaternion.Euler(0f, mouseXInput, 0f);
-        rb.MoveRotation(rb.rotation * deltaRotation);
+        if (slideCooldownTimer > 0f)
+        {
+            slideCooldownTimer -= Time.deltaTime;
+        }
     }
 
     void HandleMovement()
@@ -319,10 +325,17 @@ public class PlayerMovement : MonoBehaviour
             }
             else if (isGrounded && !isCrouching)
             {
+                rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
                 rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
                 isJumping = true;
             }
         }
+    }
+
+    void HandleRotation()
+    {
+        Quaternion deltaRotation = Quaternion.Euler(0f, mouseXInput, 0f);
+        rb.MoveRotation(rb.rotation * deltaRotation);
     }
 
     void HandleCrouch()
@@ -333,7 +346,7 @@ public class PlayerMovement : MonoBehaviour
             {
                 CancelSlide();
             }
-            else
+            else if (slideCooldownTimer <= 0f)
             {
                 if (isGrounded)
                 {
@@ -392,7 +405,7 @@ public class PlayerMovement : MonoBehaviour
 
     void StartSlide()
     {
-        if (!isGrounded)
+        if (!isGrounded || slideCooldownTimer > 0f)
         {
             return;
         }
@@ -401,6 +414,7 @@ public class PlayerMovement : MonoBehaviour
             return;
         }
         isSliding = true;
+        slideCooldownTimer = slideCooldown;
         slideTimerInternal = slideDuration;
         initialSlideSpeed = walkSpeed * slideSpeedMultiplier;
         currentSpeed = initialSlideSpeed;
