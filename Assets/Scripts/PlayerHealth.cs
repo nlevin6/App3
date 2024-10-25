@@ -14,6 +14,7 @@ public class PlayerHealth : MonoBehaviour
     public AudioClip grunt2;
     public AudioClip grunt3;
     public AudioClip deathClip;
+    public AudioClip regenerationClip;
     public AudioSource audioSource;
 
     [Header("Damage Settings")]
@@ -33,6 +34,7 @@ public class PlayerHealth : MonoBehaviour
 
     private bool canRegenerate = false;
     private float timeSinceLastDamage;
+    private bool isRegenerating = false;
 
     private void Start()
     {
@@ -86,6 +88,7 @@ public class PlayerHealth : MonoBehaviour
 
         timeSinceLastDamage = 0f;
         canRegenerate = false;
+        isRegenerating = false;
 
         if (health <= 0f)
         {
@@ -149,9 +152,19 @@ public class PlayerHealth : MonoBehaviour
     {
         if (health < 100f)
         {
+            if (!isRegenerating && health < 80f)
+            {
+                PlaySound(regenerationClip);
+                isRegenerating = true;
+            }
+
             health += regenerationRate * Time.deltaTime;
             health = Mathf.Min(health, 100f);
             UpdateScreenBleedEffect();
+        }
+        else
+        {
+            isRegenerating = false;
         }
     }
 
