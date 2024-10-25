@@ -47,6 +47,10 @@ public class MutantZombie : MonoBehaviour
     private AudioSource audioSource;
     private AudioSource growlSource;
 
+    [Header("Damage Settings")]
+    public float damageAmount = 10f;
+    private PlayerHealth playerHealth;
+
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
@@ -74,6 +78,12 @@ public class MutantZombie : MonoBehaviour
         if (attackClip == null)
         {
             Debug.LogError("Attack Clip is not assigned in the Inspector!");
+        }
+
+        playerHealth = target.GetComponent<PlayerHealth>();
+        if (playerHealth == null)
+        {
+            Debug.LogError("PlayerHealth component is missing on the target!");
         }
 
         InitializeGrowlSource();
@@ -311,6 +321,11 @@ public class MutantZombie : MonoBehaviour
         else
         {
             Debug.LogError("Attack Clip is not assigned!");
+        }
+
+        if (playerHealth != null && Vector3.Distance(transform.position, target.position) <= attackRange)
+        {
+            playerHealth.TakeDamage(damageAmount);
         }
 
         StartCoroutine(ResetAttack());
