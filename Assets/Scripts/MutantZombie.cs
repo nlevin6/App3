@@ -51,20 +51,32 @@ public class MutantZombie : MonoBehaviour
     public float damageAmount = 10f;
     private PlayerHealth playerHealth;
 
+    public event System.Action OnDeath;
+
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
         navAgent.stoppingDistance = attackRange;
         navAgent.updateRotation = false;
 
+        // Dynamically assign target if not set in the Inspector
         if (target == null)
         {
-            Debug.LogError("Target is not assigned!");
+            target = GameObject.FindWithTag("Player")?.transform; // Assumes Player has the tag "Player"
+            if (target == null)
+            {
+                Debug.LogError("Target not found! Ensure there's a GameObject tagged 'Player' in the scene.");
+            }
         }
 
+        // Dynamically assign animator if not set
         if (animator == null)
         {
             animator = GetComponent<Animator>();
+            if (animator == null)
+            {
+                Debug.LogError("Animator component not found on this GameObject.");
+            }
         }
 
         currentHealth = maxHealth;
@@ -483,6 +495,7 @@ public class MutantZombie : MonoBehaviour
 
     public void Die()
     {
+        OnDeath?.Invoke();
         animator.SetTrigger("Death");
         if (deathClip != null && audioSource != null)
         {
