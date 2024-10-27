@@ -45,6 +45,7 @@ public class WeaponController : MonoBehaviour
 
     [Header("Firing Settings")]
     public int magCapacity = 100;
+    private int gunMagCapacity;
     public int bulletAmount = 20;
     private int reloadBulletAmount;
     public float fireRate = 10f;
@@ -106,6 +107,7 @@ public class WeaponController : MonoBehaviour
         targetGunPosition = initialPosition;
 
         reloadBulletAmount = bulletAmount;
+        gunMagCapacity = magCapacity;
 
         if (cameraTransform == null)
         {
@@ -172,6 +174,14 @@ public class WeaponController : MonoBehaviour
             animator.SetFloat("Speed", speed);
         }
         animator.SetBool("IsSprinting", isSprinting);
+    }
+
+    public int GetGunMagCapacity(){
+        return gunMagCapacity;
+    }
+
+    public int GetReloadBulletAmount(){
+        return reloadBulletAmount;
     }
 
     void HandleAiming()
@@ -413,6 +423,13 @@ public class WeaponController : MonoBehaviour
             audioSource.PlayOneShot(reloadingSound);
         }
     }
+
+    public void RefillAmmo()
+    {
+        magCapacity = gunMagCapacity;
+        bulletAmount =reloadBulletAmount;
+    }
+
 
     void HandleGunPosition()
     {
