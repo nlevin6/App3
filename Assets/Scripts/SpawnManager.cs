@@ -32,7 +32,6 @@ public class SpawnManager : MonoBehaviour
 
     void StartNewRound()
     {
-        Debug.Log($"Starting Round: {currentRound}");
         roundInProgress = true;
         totalEnemiesToSpawn = enemiesPerRound * currentRound;
         remainingEnemies = totalEnemiesToSpawn;
@@ -47,12 +46,10 @@ public class SpawnManager : MonoBehaviour
 
     IEnumerator SpawnEnemies()
     {
-        Debug.Log($"Spawning {totalEnemiesToSpawn} enemies for Round {currentRound}.");
         for (int i = 0; i < totalEnemiesToSpawn; i++)
         {
             if (!roundInProgress)
             {
-                Debug.Log("Round ended unexpectedly. Stopping spawn.");
                 yield break;
             }
             SpawnEnemy(i + 1);
@@ -71,7 +68,6 @@ public class SpawnManager : MonoBehaviour
         Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Length)];
         GameObject enemy = Instantiate(enemyPrefab, spawnPoint.position, spawnPoint.rotation);
         enemy.SetActive(true);
-        Debug.Log($"Spawned Enemy {enemyNumber} at {spawnPoint.position}.");
 
         MutantZombie mutantZombie = enemy.GetComponent<MutantZombie>();
         if (mutantZombie != null)
@@ -87,7 +83,6 @@ public class SpawnManager : MonoBehaviour
     void EnemyDied()
     {
         remainingEnemies--;
-        Debug.Log($"Enemy died. Enemies left to kill: {remainingEnemies}");
         if (remainingEnemies <= 0 && roundInProgress)
         {
             EndRound();
@@ -99,7 +94,6 @@ public class SpawnManager : MonoBehaviour
         if (!roundInProgress)
             return;
 
-        Debug.Log($"Round {currentRound} complete.");
         roundInProgress = false;
         currentRound++;
         StartNewRound();

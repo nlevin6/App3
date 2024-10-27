@@ -87,7 +87,7 @@ public class PlayerMovement : MonoBehaviour
 
     private bool isJumping = false;
 
-    private Vector3 groundNormal = Vector3.up; // Added for ground normal tracking
+    private Vector3 groundNormal = Vector3.up;
 
     void Start()
     {
@@ -118,7 +118,7 @@ public class PlayerMovement : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.constraints = RigidbodyConstraints.FreezeRotation;
-        rb.drag = 0f; // Adjusted drag if needed
+        rb.drag = 0f;
     }
 
     void Update()
@@ -135,7 +135,7 @@ public class PlayerMovement : MonoBehaviour
     {
         HandleMovement();
         HandleRotation();
-        UpdatePhysicsMaterial(); // Added to switch physics materials
+        UpdatePhysicsMaterial();
         if (requestedSlide && isGrounded && !isSliding)
         {
             StartSlide();
@@ -186,7 +186,6 @@ public class PlayerMovement : MonoBehaviour
             }
             else if (isSliding)
             {
-                // Sliding logic
             }
             else if (isCrouching)
             {
@@ -208,7 +207,7 @@ public class PlayerMovement : MonoBehaviour
 
             if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out hitInfo, groundDistance + 1f, groundMask))
             {
-                groundNormal = hitInfo.normal; // Store ground normal
+                groundNormal = hitInfo.normal;
                 inputMove = Vector3.ProjectOnPlane(inputMove, groundNormal).normalized;
             }
 
@@ -232,7 +231,7 @@ public class PlayerMovement : MonoBehaviour
 
         if (isGrounded && !isJumping)
         {
-            rb.AddForce(-groundNormal * stickToGroundForce, ForceMode.Acceleration); // Adjusted force direction
+            rb.AddForce(-groundNormal * stickToGroundForce, ForceMode.Acceleration);
         }
 
         if (!isGrounded)
@@ -240,7 +239,6 @@ public class PlayerMovement : MonoBehaviour
             isJumping = false;
         }
 
-        // Zero out horizontal velocity when stationary
         if (isGrounded && inputMove.magnitude == 0f && !isSliding)
         {
             Vector3 velocity = rb.velocity;
