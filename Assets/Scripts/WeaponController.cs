@@ -13,6 +13,7 @@ public class WeaponController : MonoBehaviour
     public AudioSource audioSource;
     public AudioClip reloadingSound;
     public AudioClip shootingSound;
+    public AudioClip emptyMagSound;
 
     private PlayerMovement playerMovement;
     private bool isAiming;
@@ -43,6 +44,7 @@ public class WeaponController : MonoBehaviour
     private Vector3 cameraRecoilOffset;
 
     [Header("Firing Settings")]
+    public int magCapacity = 100;
     public int bulletAmount = 20;
     private int reloadBulletAmount;
     public float fireRate = 10f;
@@ -206,6 +208,11 @@ public class WeaponController : MonoBehaviour
     {
         float timeBetweenShots = 1f / fireRate;
 
+        if (Input.GetMouseButtonDown(0) && magCapacity == 0)
+        {
+            PlayEmptyMagSound();
+        }
+
         if (Input.GetMouseButton(0) && Time.time >= nextFireTime && !isReloading)
         {
             if (bulletAmount > 0)
@@ -252,6 +259,14 @@ public class WeaponController : MonoBehaviour
             {
                 crosshairController.StopShooting();
             }
+        }
+    }
+
+    void PlayEmptyMagSound()
+    {
+        if (audioSource && emptyMagSound)
+        {
+            audioSource.PlayOneShot(emptyMagSound);
         }
     }
 
@@ -348,7 +363,7 @@ public class WeaponController : MonoBehaviour
 
     void HandleReloading()
     {
-        if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting && bulletAmount < reloadBulletAmount)
+        if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting && bulletAmount < reloadBulletAmount && magCapacity > 0)
         {
             StartCoroutine(Reload());
         }
@@ -356,7 +371,21 @@ public class WeaponController : MonoBehaviour
 
     private IEnumerator Reload()
     {
+        if (magCapacity <= 0)
+            yield break;
+
         isReloading = true;
+        int numToReload = reloadBulletAmount - bulletAmount;
+        magCapacity = magCapacity - numToReload;
+        if (magCapacity < numToReload)
+        {
+            bulletAmount = magCapacity;
+            magCapacity = 0;
+        }
+        else
+        {
+            bulletAmount = reloadBulletAmount;
+        }
 
         if (scopedWeapon != null)
         {
@@ -367,7 +396,6 @@ public class WeaponController : MonoBehaviour
         PlayReloadingSound();
         yield return new WaitForSeconds(reloadDuration);
 
-        bulletAmount = reloadBulletAmount;
         isReloading = false;
         
         if (scopedWeapon != null)
