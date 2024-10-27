@@ -43,7 +43,7 @@ public class WeaponController : MonoBehaviour
     private Vector3 cameraRecoilOffset;
 
     [Header("Firing Settings")]
-    public int bulletAmount = 3;
+    public int bulletAmount = 20;
     private int reloadBulletAmount;
     public float fireRate = 10f;
     private float nextFireTime = 0f;
@@ -348,7 +348,7 @@ public class WeaponController : MonoBehaviour
 
     void HandleReloading()
     {
-        if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting)
+        if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting && bulletAmount < reloadBulletAmount)
         {
             StartCoroutine(Reload());
         }
