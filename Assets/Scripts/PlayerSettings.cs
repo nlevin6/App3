@@ -9,6 +9,8 @@ public class PlayerMovement : MonoBehaviour
     public float crouchSpeed = 2f;
     public float jumpForce = 5f;
     public float mouseSensitivity = 100f;
+    private float adsAdjustedSensitivity;
+    private ScopedWeapon scopedWeapon;
     public Transform playerCamera;
 
     [Header("Camera Bobbing Settings")]
@@ -95,15 +97,22 @@ public class PlayerMovement : MonoBehaviour
         playerCollider = GetComponent<CapsuleCollider>();
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
+        scopedWeapon = GetComponentInChildren<ScopedWeapon>();
+
         currentSpeed = walkSpeed;
         lastGroundedSpeed = walkSpeed;
         currentBobbingSpeed = walkBobbingSpeed;
         currentBobbingAmount = bobbingAmount;
+
         defaultCameraYPos = playerCamera.localPosition.y;
+        adsAdjustedSensitivity = mouseSensitivity;
         defaultHeight = playerCamera.localPosition.y;
+
         originalColliderHeight = playerCollider.height;
         originalColliderCenter = playerCollider.center;
         originalCameraPosition = playerCamera.localPosition;
+
         if (walkingAudioSource != null && walkingSound != null)
         {
             walkingAudioSource.clip = walkingSound;
@@ -129,6 +138,8 @@ public class PlayerMovement : MonoBehaviour
         HandleCrouch();
         UpdateGroundCheckPosition();
         UpdateSlideCooldown();
+        UpdateADSSensitivity();
+        HandleMouseLookInput();
     }
 
     void FixedUpdate()
@@ -146,14 +157,6 @@ public class PlayerMovement : MonoBehaviour
     void LateUpdate()
     {
         playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
-    }
-
-    void HandleMouseLookInput()
-    {
-        mouseXInput = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-        mouseYInput = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
-        xRotation -= mouseYInput;
-        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
     }
 
     void UpdateSlideCooldown()
@@ -270,6 +273,30 @@ public class PlayerMovement : MonoBehaviour
                 walkingAudioSource.pitch = 1f;
             }
         }
+    }
+
+    void UpdateADSSensitivity()
+    {
+        if (scopedWeapon != null && scopedWeapon.isAiming)
+        {
+            adsAdjustedSensitivity = mouseSensitivity * scopedWeapon.adsSensitivityMultiplier;
+        }
+        else
+        {
+            adsAdjustedSensitivity = mouseSensitivity;
+        }
+    }
+
+    void HandleMouseLookInput()
+    {
+        float mouseXInput = Input.GetAxis("Mouse X") * adsAdjustedSensitivity * Time.deltaTime;
+        float mouseYInput = Input.GetAxis("Mouse Y") * adsAdjustedSensitivity * Time.deltaTime;
+        
+        xRotation -= mouseYInput;
+        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+        
+        rb.MoveRotation(rb.rotation * Quaternion.Euler(0f, mouseXInput, 0f));
+        playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
     }
 
     void HandleCameraBobbing()

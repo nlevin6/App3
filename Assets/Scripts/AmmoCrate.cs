@@ -8,12 +8,10 @@ public class AmmoCrate : MonoBehaviour
     public Text ammoCratePrompt;
     public AudioClip refillSound;
 
-    private Transform playerTransform;
     private AudioSource audioSource;
 
     void Start()
     {
-        playerTransform = Camera.main.transform;
         if (ammoCratePrompt != null)
             ammoCratePrompt.gameObject.SetActive(false);
 
@@ -22,11 +20,12 @@ public class AmmoCrate : MonoBehaviour
 
     void Update()
     {
+        Transform playerTransform = Camera.main.transform;
         WeaponController weaponController = playerTransform.GetComponentInChildren<WeaponController>();
 
         if (weaponController != null && ShouldShowPrompt(weaponController))
         {
-            bool isLookingAtCrate = IsLookingAtCrate();
+            bool isLookingAtCrate = IsLookingAtCrate(playerTransform);
             float distance = Vector3.Distance(transform.position, playerTransform.position);
 
             if (isLookingAtCrate && distance <= interactionDistance)
@@ -52,7 +51,7 @@ public class AmmoCrate : MonoBehaviour
         }
     }
 
-    bool IsLookingAtCrate()
+    bool IsLookingAtCrate(Transform playerTransform)
     {
         Ray ray = new Ray(playerTransform.position, playerTransform.forward);
         RaycastHit hit;
@@ -66,12 +65,8 @@ public class AmmoCrate : MonoBehaviour
 
     void RefillPlayerAmmo(WeaponController weaponController)
     {
-        if(weaponController.GetGunMagCapacity() > weaponController.magCapacity || weaponController.GetReloadBulletAmount() > weaponController.bulletAmount)
-        {
-            weaponController.RefillAmmo();
-            PlayRefillSound();
-        }
-
+        weaponController.RefillAmmo();
+        PlayRefillSound();
     }
 
     void PlayRefillSound()

@@ -10,6 +10,7 @@ public class ScopedWeapon : MonoBehaviour
     public GameObject regularCrosshair;
     public bool isAiming = false;
     public bool isReloading = false;
+    public float adsSensitivityMultiplier = 0.5f;
 
     private float defaultFOV;
     private float targetFOV;
