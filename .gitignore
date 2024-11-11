@@ -4,6 +4,10 @@
 # Except the Scripts folder
 !/Assets/Scripts/
 !/Assets/Scripts/**
+!/Assets/Animations/
+!/Assets/Animations/**
+!/Assets/Hands_Weapons_Animations_Pack_Update
+!/Assets/Hands_Weapons_Animations_Pack_Update/**
 
 # Unity specific ignores
 /[Ll]ibrary/
