@@ -3,9 +3,11 @@ using UnityEngine.UI;
 using System.Collections;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.SceneManagement; 
+
 public class PlayerHealth : MonoBehaviour
 {
-
+//please
     [Header("UI Components")]
     public Text moneyText;
     public Text roundText;
@@ -231,6 +233,12 @@ public class PlayerHealth : MonoBehaviour
 
         PlaySound(deathClip);
         GetComponent<PlayerMovement>().enabled = false;
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+
+        RoundData.RoundsSurvived = spawnManager.getRound();
+
+        SceneManager.LoadScene("DeathScene");
     }
 
     private void PlaySound(AudioClip clip)
