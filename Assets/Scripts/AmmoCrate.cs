@@ -10,7 +10,7 @@ public class AmmoCrate : MonoBehaviour
     public Transform target;
     private AudioSource audioSource;
     private PlayerHealth playerHealth;
-    private int ammoCost=20;
+    private int ammoCost=2000;
     void Start()
     {
         target = GameObject.FindWithTag("Player")?.transform;

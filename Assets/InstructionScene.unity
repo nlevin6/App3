@@ -466,7 +466,7 @@ MonoBehaviour:
   m_text: 'Goals:
 
     Survive for as long as possible. You can rebuy ammo at ammo
-    create'
+    crate'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 708f7cfb2ba7eb148bce5a7727bcd679, type: 2}
   m_sharedMaterial: {fileID: -982836137060468379, guid: 708f7cfb2ba7eb148bce5a7727bcd679,
