@@ -1244,6 +1244,8 @@ MonoBehaviour:
 
     Right click to aim down sights
 
+    ESC to pause and unpause
+
 '
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 708f7cfb2ba7eb148bce5a7727bcd679, type: 2}
