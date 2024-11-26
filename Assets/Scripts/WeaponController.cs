@@ -1,8 +1,12 @@
 using UnityEngine;
 using System.Collections;
-
+using UnityEngine.UI; 
+using TMPro; 
 public class WeaponController : MonoBehaviour
 {
+    [Header("UI Components")]
+    public Text ammoText;
+
     public ScopedWeapon scopedWeapon;
     [Header("Recoil Pattern Settings")]
     public RecoilPattern recoilPattern;
@@ -128,6 +132,7 @@ public class WeaponController : MonoBehaviour
         ApplyRecoil();
         HandleGunPosition();
         HandleMuzzleTransform();
+        
     }
 
     void HandleMovement()
@@ -222,6 +227,10 @@ public class WeaponController : MonoBehaviour
         {
             PlayEmptyMagSound();
         }
+        if (!isReloading)
+        {
+            UpdateAmmoDisplay();
+        }
 
         if (Input.GetMouseButton(0) && Time.time >= nextFireTime && !isReloading)
         {
@@ -248,7 +257,7 @@ public class WeaponController : MonoBehaviour
                 animator.SetBool("IsShooting", false);
                 animator.speed = 1f;
                 currentRecoilIndex = 0;
-
+                
                 if (crosshairController != null)
                 {
                     crosshairController.StopShooting();
@@ -270,6 +279,8 @@ public class WeaponController : MonoBehaviour
                 crosshairController.StopShooting();
             }
         }
+
+        
     }
 
     void PlayEmptyMagSound()
@@ -376,6 +387,7 @@ public class WeaponController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R) && !isReloading && !isShooting && bulletAmount < reloadBulletAmount && magCapacity > 0)
         {
             StartCoroutine(Reload());
+            
         }
     }
 
@@ -428,6 +440,13 @@ public class WeaponController : MonoBehaviour
     {
         magCapacity = gunMagCapacity;
         bulletAmount =reloadBulletAmount;
+    }
+    private void UpdateAmmoDisplay()
+    {
+        if (ammoText != null)
+        {
+            ammoText.text = $"{bulletAmount} / {magCapacity}"; // Update ammo text
+        }
     }
 
 

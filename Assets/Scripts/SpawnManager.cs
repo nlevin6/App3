@@ -57,6 +57,11 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
+    public int getRound()
+    {
+        return currentRound;
+    }
+
     void SpawnEnemy(int enemyNumber)
     {
         if (spawnPoints.Length == 0)

@@ -1,14 +1,24 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using UnityEngine.UI;
+using TMPro;
+using UnityEngine.SceneManagement; 
 
 public class PlayerHealth : MonoBehaviour
 {
+//please
+    [Header("UI Components")]
+    public Text moneyText;
+    public Text roundText;
+
     [Header("Health Settings")]
     public float health = 100f;
+    public float money = 0f;
     public float regenerationRate = 5f;
     public float regenerationDelay = 5f;
-
+    
+    
     [Header("Audio Settings")]
     public AudioClip grunt1;
     public AudioClip grunt2;
@@ -35,9 +45,10 @@ public class PlayerHealth : MonoBehaviour
     private bool canRegenerate = false;
     private float timeSinceLastDamage;
     private bool isRegenerating = false;
-
+    private SpawnManager spawnManager;
     private void Start()
     {
+        spawnManager= FindObjectOfType<SpawnManager>();
         if (audioSource == null)
         {
             audioSource = GetComponent<AudioSource>();
@@ -73,6 +84,32 @@ public class PlayerHealth : MonoBehaviour
         {
             canRegenerate = true;
         }
+        UpdateMoneyDisplay();
+    }
+
+    private void UpdateMoneyDisplay()
+    {
+        if (moneyText != null)
+        {
+            moneyText.text = $"${money}"; // Update ammo text
+        }
+        roundText.text = $"{spawnManager.getRound()}";
+
+    }
+
+    public void AddMoney()
+    {
+        money += 100;
+        Debug.Log(money);
+    }
+
+    public int GetMoney()
+    {
+        return (int)money;
+    }
+    public void RemoveMoney(int amount)
+    {
+        money -= amount;
     }
 
     public void TakeDamage(float damage)
@@ -192,8 +229,16 @@ public class PlayerHealth : MonoBehaviour
 
     private void Die()
     {
+      
+
         PlaySound(deathClip);
         GetComponent<PlayerMovement>().enabled = false;
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+
+        RoundData.RoundsSurvived = spawnManager.getRound();
+
+        SceneManager.LoadScene("DeathScene");
     }
 
     private void PlaySound(AudioClip clip)

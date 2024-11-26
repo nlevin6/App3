@@ -8,6 +8,8 @@ public class MutantZombie : MonoBehaviour
     public Transform target;
     public Animator animator;
 
+
+
     [Header("Movement Settings")]
     public float attackRange = 2f;
     public float walkDistance = 15f;
@@ -48,7 +50,7 @@ public class MutantZombie : MonoBehaviour
     private AudioSource growlSource;
 
     [Header("Damage Settings")]
-    public float damageAmount = 10f;
+    public float damageAmount = 20f;
     private PlayerHealth playerHealth;
 
     public event System.Action OnDeath;
@@ -58,7 +60,7 @@ public class MutantZombie : MonoBehaviour
         navAgent = GetComponent<NavMeshAgent>();
         navAgent.stoppingDistance = attackRange;
         navAgent.updateRotation = false;
-
+        
         if (target == null)
         {
             target = GameObject.FindWithTag("Player")?.transform;
@@ -406,6 +408,7 @@ public class MutantZombie : MonoBehaviour
 
     public void Die()
     {
+        playerHealth.AddMoney();
         OnDeath?.Invoke();
         animator.SetTrigger("Death");
         if (deathClip != null && audioSource != null)

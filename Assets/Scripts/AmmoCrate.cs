@@ -7,11 +7,14 @@ public class AmmoCrate : MonoBehaviour
     public KeyCode interactionKey = KeyCode.F;
     public Text ammoCratePrompt;
     public AudioClip refillSound;
-
+    public Transform target;
     private AudioSource audioSource;
-
+    private PlayerHealth playerHealth;
+    private int ammoCost=2000;
     void Start()
     {
+        target = GameObject.FindWithTag("Player")?.transform;
+        playerHealth = target.GetComponent<PlayerHealth>();
         if (ammoCratePrompt != null)
             ammoCratePrompt.gameObject.SetActive(false);
 
@@ -33,8 +36,10 @@ public class AmmoCrate : MonoBehaviour
                 if (ammoCratePrompt != null)
                     ammoCratePrompt.gameObject.SetActive(true);
 
-                if (Input.GetKeyDown(interactionKey))
+                
+                if (Input.GetKeyDown(interactionKey)&& playerHealth.GetMoney()>=ammoCost)
                 {
+                    playerHealth.RemoveMoney(ammoCost);
                     RefillPlayerAmmo(weaponController);
                 }
             }
