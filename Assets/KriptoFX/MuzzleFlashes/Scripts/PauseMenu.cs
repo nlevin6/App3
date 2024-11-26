@@ -28,6 +28,7 @@ public class PauseMenu : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
         isPaused = false;
        
     }
@@ -38,7 +39,7 @@ public class PauseMenu : MonoBehaviour
         Time.timeScale = 0f; 
         AudioListener.volume = 0f;
 
-        Cursor.lockState = CursorLockMode.None; // Unlocks the cursor
+        Cursor.lockState = CursorLockMode.None; 
         Cursor.visible = true;
         isPaused = true;
     }

@@ -50,7 +50,7 @@ public class MutantZombie : MonoBehaviour
     private AudioSource growlSource;
 
     [Header("Damage Settings")]
-    public float damageAmount = 10f;
+    public float damageAmount = 20f;
     private PlayerHealth playerHealth;
 
     public event System.Action OnDeath;

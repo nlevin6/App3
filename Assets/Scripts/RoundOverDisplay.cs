@@ -12,6 +12,6 @@ public class RoundOverDisplay : MonoBehaviour
         int roundsSurvived = RoundData.RoundsSurvived;
 
         // Set the TextMeshPro text to display the message
-        roundOverText.text = $"You survived {roundsSurvived} rounds.";
+        roundOverText.text = $"You survived {roundsSurvived} rounds";
     }
 }
